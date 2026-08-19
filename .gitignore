@@ -1,0 +1,10 @@
+node_modules/
+.output/
+.vinxi/
+.vercel/
+.env
+__pycache__/
+*.pyc
+crawlers/venv/
+crawlers/.env
+dist/

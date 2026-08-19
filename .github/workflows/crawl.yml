@@ -1,0 +1,59 @@
+name: Run Crawlers
+
+on:
+  schedule:
+    # HN: every 6 hours
+    - cron: "0 */6 * * *"
+    # GitHub Trending: daily at 08:00 UTC
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      crawler:
+        description: "Crawler slug to run (leave empty for all)"
+        required: false
+        type: string
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  API_SECRET: ${{ secrets.API_SECRET }}
+
+jobs:
+  sync:
+    name: Sync Registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: crawlers/requirements.txt
+      - run: pip install -r crawlers/requirements.txt
+        working-directory: crawlers
+      - run: python run.py --sync
+        working-directory: crawlers
+
+  crawl:
+    name: Run ${{ matrix.crawler }}
+    needs: sync
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crawler:
+          - hackernews
+          - github-trending
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: crawlers/requirements.txt
+      - run: pip install -r crawlers/requirements.txt
+        working-directory: crawlers
+      - name: Skip if not targeted
+        if: ${{ github.event.inputs.crawler != '' && github.event.inputs.crawler != matrix.crawler }}
+        run: echo "Skipping ${{ matrix.crawler }}" && exit 0
+      - run: python run.py ${{ matrix.crawler }} --trigger ci
+        working-directory: crawlers

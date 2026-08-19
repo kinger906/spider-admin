@@ -1,0 +1,33 @@
+{
+  "name": "spider-admin",
+  "type": "module",
+  "scripts": {
+    "dev": "vinxi dev",
+    "build": "vinxi build",
+    "start": "vinxi start",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.15.3",
+    "@solidjs/start": "^1.1.0",
+    "@vercel/blob": "^0.27.0",
+    "drizzle-orm": "^0.39.0",
+    "@neondatabase/serverless": "^0.10.4",
+    "solid-js": "^1.9.4",
+    "vinxi": "^0.5.3",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "drizzle-kit": "^0.30.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
