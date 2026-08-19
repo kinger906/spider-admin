@@ -78,10 +78,34 @@ CREATE TABLE IF NOT EXISTS spider_system_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_spider_data_records_crawler_url ON spider_data_records(crawler_id, url);
+
+CREATE TABLE IF NOT EXISTS spider_users (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(64) NOT NULL UNIQUE,
+  password_hash VARCHAR(256) NOT NULL,
+  display_name VARCHAR(128),
+  role VARCHAR(32) NOT NULL DEFAULT 'admin',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS spider_sessions (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES spider_users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+"""
+
+SEED_SQL = """
+INSERT INTO spider_users (username, password_hash, display_name, role)
+VALUES ('admin', 'admin123', 'Administrator', 'admin')
+ON CONFLICT (username) DO NOTHING;
 """
 
 if __name__ == "__main__":
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute(SCHEMA_SQL)
-    print("Migration complete: spider_ tables created (existing tables untouched)")
+        cur.execute(SEED_SQL)
+    print("Migration complete: spider_ tables created, admin user seeded")

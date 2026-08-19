@@ -82,6 +82,25 @@ export const mediaFiles = pgTable("spider_media_files", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const users = pgTable("spider_users", {
+  id: serial("id").primaryKey(),
+  username: varchar("username", { length: 64 }).notNull().unique(),
+  passwordHash: varchar("password_hash", { length: 256 }).notNull(),
+  displayName: varchar("display_name", { length: 128 }),
+  role: varchar("role", { length: 32 }).notNull().default("admin"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const sessions = pgTable("spider_sessions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const systemLogs = pgTable("spider_system_logs", {
   id: serial("id").primaryKey(),
   level: varchar("level", { length: 16 }).notNull().default("info"),
