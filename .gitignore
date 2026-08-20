@@ -7,4 +7,6 @@ __pycache__/
 *.pyc
 crawlers/venv/
 crawlers/.env
+crawlers/_wenshu_*
+crawlers/wenshu_storage_state.json
 dist/

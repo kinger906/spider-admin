@@ -16,6 +16,9 @@ on:
 env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
   API_SECRET: ${{ secrets.API_SECRET }}
+  WENSHU_COOKIE: ${{ secrets.WENSHU_COOKIE }}
+  WENSHU_USER: ${{ secrets.WENSHU_USER }}
+  WENSHU_PASSWORD: ${{ secrets.WENSHU_PASSWORD }}
 
 jobs:
   sync:
@@ -43,6 +46,9 @@ jobs:
         crawler:
           - hackernews
           - github-trending
+          - juejin-frontend
+          - douban-top250
+          - wenshu-rape
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
