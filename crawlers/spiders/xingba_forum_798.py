@@ -23,11 +23,11 @@ class XingbaForum798Crawler(BaseCrawler):
         name="杏吧华人下载区",
         slug="xingba-forum-798",
         description="按最后发表倒序爬取杏吧华人性爱下载区(fid=798)标题、发表时间与下载链接",
-        schedule="0 */6 * * *",
+        schedule="0 */4 * * *",
         config={
             "retry_limit": 2,
             "start_page": 1,
-            "end_page": 10,
+            "end_page": 2,
             "page_delay": 1.5,
             "detail_delay": 0.8,
             "base_url": "https://www.tixanshiyanzhi.pro",
