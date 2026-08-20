@@ -117,14 +117,23 @@ CrawlerRegistry.register(MyCrawler)
 ## GitHub Actions
 
 - `crawl.yml`: 定时调度爬虫 (支持 cron + 手动触发)
-- `deploy.yml`: 推送 main 分支自动部署到 Vercel
+- `deploy.yml`: 推送 `master` 时构建，并把 Secrets 同步到 Vercel Production，再 `--prebuilt` 部署
 
 ## GitHub Secrets 配置
 
+在仓库 **Settings → Secrets and variables → Actions** 中添加：
+
 | Secret | 说明 |
 |--------|------|
-| `DATABASE_URL` | Neon Postgres 连接字符串 |
-| `API_SECRET` | API 认证密钥 |
+| `DATABASE_URL` | Neon Postgres 连接字符串（必填，CI 会同步到 Vercel） |
+| `API_SECRET` | 会话密钥，**至少 32 个字符**（必填，CI 会同步到 Vercel） |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob Token（可选） |
 | `VERCEL_TOKEN` | Vercel 部署 Token |
 | `VERCEL_ORG_ID` | Vercel 组织 ID |
 | `VERCEL_PROJECT_ID` | Vercel 项目 ID |
+
+`API_SECRET` 示例：`spider-secret-key-min-32-chars!!`
+
+部署后可访问 `/api/health` 检查环境变量是否生效：
+- `hasDatabaseUrl: true`
+- `hasApiSecret: true`

@@ -20,14 +20,61 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
+
+      - name: Build (Vercel preset → .vercel/output)
+        run: pnpm build
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: Deploy to Vercel
+          API_SECRET: ${{ secrets.API_SECRET }}
+
+      - name: Verify Vercel output
+        run: test -d .vercel/output || (echo "Missing .vercel/output — check app.config.ts server.preset=vercel" && exit 1)
+
+      - name: Install Vercel CLI
         if: github.ref == 'refs/heads/master'
+        run: npm i -g vercel@latest
+
+      - name: Sync env vars to Vercel Production
+        if: github.ref == 'refs/heads/master'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          API_SECRET: ${{ secrets.API_SECRET }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: |
-          npm i -g vercel@latest
-          vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+          set -euo pipefail
+
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "ERROR: GitHub Secret DATABASE_URL is empty"
+            exit 1
+          fi
+          if [ -z "${API_SECRET:-}" ] || [ "${#API_SECRET}" -lt 32 ]; then
+            echo "ERROR: GitHub Secret API_SECRET must be set and >= 32 characters"
+            exit 1
+          fi
+
+          sync_env() {
+            local name="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "Skip $name (empty)"
+              return 0
+            fi
+            echo "Syncing $name → Vercel Production"
+            # Remove existing (ignore if missing), then add
+            vercel env rm "$name" production --yes --token="$VERCEL_TOKEN" 2>/dev/null || true
+            printf '%s' "$value" | vercel env add "$name" production --token="$VERCEL_TOKEN"
+          }
+
+          sync_env DATABASE_URL "$DATABASE_URL"
+          sync_env API_SECRET "$API_SECRET"
+          sync_env BLOB_READ_WRITE_TOKEN "${BLOB_READ_WRITE_TOKEN:-}"
+
+      - name: Deploy to Vercel (prebuilt)
+        if: github.ref == 'refs/heads/master'
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
