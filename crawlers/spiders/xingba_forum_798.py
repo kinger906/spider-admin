@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from urllib.parse import urljoin, urlparse
@@ -24,7 +25,7 @@ class XingbaForum798Crawler(BaseCrawler):
         description="按最后发表倒序爬取杏吧华人性爱下载区(fid=798)标题、发表时间与下载链接",
         schedule="0 */6 * * *",
         config={
-            "retry_limit": 3,
+            "retry_limit": 2,
             "start_page": 1,
             "end_page": 10,
             "page_delay": 1.5,
@@ -34,6 +35,9 @@ class XingbaForum798Crawler(BaseCrawler):
                 "/forum.php?mod=forumdisplay&fid=798"
                 "&filter=lastpost&orderby=lastpost"
             ),
+            # 游标 backfill_next_page 只存在 DB，勿写进默认 config，避免注册时被覆盖
+            "backfill_end_page": 1000,
+            "backfill_batch_size": 30,
         },
     )
 
@@ -61,6 +65,8 @@ class XingbaForum798Crawler(BaseCrawler):
 
     def crawl(self) -> list[dict]:
         cfg = self.meta.config
+        self._apply_page_env_overrides(cfg)
+
         base = str(cfg.get("base_url") or "https://www.tixanshiyanzhi.pro").rstrip("/")
         start_page = int(cfg.get("start_page") or 1)
         if cfg.get("end_page") is not None:
@@ -76,8 +82,11 @@ class XingbaForum798Crawler(BaseCrawler):
         session.headers.update(self.HEADERS)
         session.headers["Referer"] = f"{base}/"
 
+        persist = getattr(self, "persist_batch", None)
         records: list[dict] = []
         seen: set[str] = set()
+        fetched_total = 0
+        self._incremental_fetched = 0
 
         for page in range(start_page, end_page + 1):
             self.wait_if_paused()
@@ -92,7 +101,7 @@ class XingbaForum798Crawler(BaseCrawler):
                 self.logger.info("No more threads on this page")
                 break
 
-            page_new = 0
+            page_records: list[dict] = []
             for item in threads:
                 self.wait_if_paused()
                 if self.should_stop:
@@ -105,7 +114,7 @@ class XingbaForum798Crawler(BaseCrawler):
 
                 detail = self._fetch_detail(session, item["url"])
                 published_at = detail.get("published_at") or item.get("published_at") or ""
-                records.append(
+                page_records.append(
                     {
                         "data": {
                             "thread_id": tid,
@@ -117,15 +126,35 @@ class XingbaForum798Crawler(BaseCrawler):
                         "url": item["url"],
                     }
                 )
-                page_new += 1
                 time.sleep(detail_delay)
 
-            self.logger.info(f"Page {page}: {len(threads)} threads, {page_new} saved")
+            fetched_total += len(page_records)
+            self._incremental_fetched = fetched_total
+
+            if persist and page_records:
+                saved = persist(page_records)
+                self.logger.info(
+                    f"Page {page}: {len(threads)} threads, {len(page_records)} fetched, {saved} new saved"
+                )
+            else:
+                records.extend(page_records)
+                self.logger.info(f"Page {page}: {len(threads)} threads, {len(page_records)} fetched")
+
             if page < end_page:
                 time.sleep(page_delay)
 
-        self.logger.info(f"Fetched {len(records)} threads total")
+        self.logger.info(f"Fetched {fetched_total} threads total")
         return records
+
+    @staticmethod
+    def _apply_page_env_overrides(cfg: dict) -> None:
+        """Allow CI/CLI to override pages via env without editing code."""
+        start = os.environ.get("XINGBA_START_PAGE") or os.environ.get("START_PAGE")
+        end = os.environ.get("XINGBA_END_PAGE") or os.environ.get("END_PAGE")
+        if start:
+            cfg["start_page"] = int(start)
+        if end:
+            cfg["end_page"] = int(end)
 
     def _list_url(self, base: str, page: int) -> str:
         path = str(

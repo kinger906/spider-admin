@@ -1,0 +1,82 @@
+name: Xingba Forum Backfill
+
+# 游标分批回填 forum-798（默认每批 30 页，从 DB backfill_next_page 续跑到 1000）
+on:
+  schedule:
+    # 每 3 小时一批，避免单 job 超时 / 触发风控
+    - cron: "20 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      start_page:
+        description: "Optional start page (empty = use DB cursor)"
+        required: false
+        type: string
+      end_page:
+        description: "Optional end page (empty = cursor + batch_size - 1)"
+        required: false
+        type: string
+      batch_size:
+        description: "Pages per run when using cursor (default 30)"
+        required: false
+        type: string
+        default: "30"
+      reset_cursor:
+        description: "If set, only reset backfill_next_page to this value and exit"
+        required: false
+        type: string
+      dry_run:
+        description: "Print planned range only"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  API_SECRET: ${{ secrets.API_SECRET }}
+  XINGBA_BATCH_SIZE: ${{ github.event.inputs.batch_size || '30' }}
+  XINGBA_BACKFILL_END: "1000"
+
+jobs:
+  backfill:
+    name: Xingba backfill batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: crawlers/requirements.txt
+
+      - name: Install dependencies
+        working-directory: crawlers
+        run: pip install -r requirements.txt
+
+      - name: Reset cursor only
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.reset_cursor != '' }}
+        working-directory: crawlers
+        run: python run_xingba_backfill.py --reset-cursor "${{ github.event.inputs.reset_cursor }}"
+
+      - name: Run backfill batch
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.reset_cursor == '' }}
+        working-directory: crawlers
+        env:
+          XINGBA_START_PAGE: ${{ github.event.inputs.start_page }}
+          XINGBA_END_PAGE: ${{ github.event.inputs.end_page }}
+        run: |
+          ARGS=(--trigger ci)
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          if [ -n "${{ github.event.inputs.start_page }}" ]; then
+            ARGS+=(--start "${{ github.event.inputs.start_page }}")
+          fi
+          if [ -n "${{ github.event.inputs.end_page }}" ]; then
+            ARGS+=(--end "${{ github.event.inputs.end_page }}")
+          fi
+          if [ -n "${{ github.event.inputs.batch_size }}" ]; then
+            ARGS+=(--batch-size "${{ github.event.inputs.batch_size }}")
+          fi
+          python run_xingba_backfill.py "${ARGS[@]}"

@@ -12,8 +12,12 @@ logger = logging.getLogger("crawler.runner")
 def run_crawler(
     crawler_cls: type[BaseCrawler],
     triggered_by: str = "manual",
+    config_overrides: dict | None = None,
 ) -> dict:
     meta = crawler_cls.meta
+    if config_overrides:
+        meta.config.update(config_overrides)
+
     log_stream = io.StringIO()
     handler = logging.StreamHandler(log_stream)
     handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
@@ -37,18 +41,36 @@ def run_crawler(
     while attempt <= retry_limit:
         try:
             instance = crawler_cls()
+            instance._incremental_saved = 0
+
+            def _persist(batch: list[dict]) -> int:
+                n = db.save_records_dedup(crawler_id, task_id, batch)
+                instance._incremental_saved += n
+                return n
+
+            instance.persist_batch = _persist  # type: ignore[attr-defined]
             instance.on_start()
             logger.info(f"[{meta.slug}] Crawl attempt {attempt + 1}")
 
             records = instance.crawl()
-            new_count = db.save_records_dedup(crawler_id, task_id, records)
+            leftover = db.save_records_dedup(crawler_id, task_id, records) if records else 0
+            new_count = int(getattr(instance, "_incremental_saved", 0)) + leftover
             instance.on_finish(records)
 
             db.finish_task(task_id, crawler_id, "success", new_count, logs=log_stream.getvalue())
-            db.save_log("info", meta.slug, f"Task {task_id} succeeded: {new_count} new / {len(records)} total")
+            db.save_log(
+                "info",
+                meta.slug,
+                f"Task {task_id} succeeded: {new_count} new / fetched={len(records) + getattr(instance, '_incremental_fetched', 0)}",
+            )
 
             logging.getLogger("crawler").removeHandler(handler)
-            return {"status": "success", "task_id": task_id, "items": new_count, "total_fetched": len(records)}
+            return {
+                "status": "success",
+                "task_id": task_id,
+                "items": new_count,
+                "total_fetched": getattr(instance, "_incremental_fetched", None) or len(records),
+            }
         except Exception as e:
             last_error = e
             attempt += 1

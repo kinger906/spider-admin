@@ -32,13 +32,48 @@ def register_crawler(name: str, slug: str, description: str, file_path: str, sch
                 description = EXCLUDED.description,
                 file_path = EXCLUDED.file_path,
                 schedule = EXCLUDED.schedule,
-                config = EXCLUDED.config,
+                -- 代码默认配置覆盖同名字段，但保留 DB 中已有的扩展键（如 backfill 游标）
+                config = COALESCE(spider_crawlers.config, '{}'::jsonb) || EXCLUDED.config,
                 updated_at = NOW()
             RETURNING id
             """,
             (name, slug, description, file_path, schedule, Json(config or {})),
         )
         return cur.fetchone()[0]
+
+
+def get_crawler_by_slug(slug: str) -> dict | None:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, slug, config FROM spider_crawlers WHERE slug = %s",
+            (slug,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {"id": row[0], "name": row[1], "slug": row[2], "config": row[3] or {}}
+
+
+def patch_crawler_config(slug: str, patch: dict) -> dict:
+    """Merge patch into crawler config JSON and return the new config."""
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE spider_crawlers
+            SET config = COALESCE(config, '{}'::jsonb) || %s::jsonb,
+                updated_at = NOW()
+            WHERE slug = %s
+            RETURNING config
+            """,
+            (Json(patch), slug),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise RuntimeError(f"Crawler not found: {slug}")
+        return row[0] or {}
+
 
 
 def create_task(crawler_id: int, triggered_by: str = "manual") -> int:
