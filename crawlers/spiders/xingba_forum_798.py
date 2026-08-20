@@ -27,7 +27,7 @@ class XingbaForum798Crawler(BaseCrawler):
         config={
             "retry_limit": 2,
             "start_page": 1,
-            "end_page": 2,
+            "end_page": 5,
             "page_delay": 1.5,
             "detail_delay": 0.8,
             "base_url": "https://www.tixanshiyanzhi.pro",
