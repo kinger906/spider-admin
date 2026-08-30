@@ -36,3 +36,14 @@ XINGBA_FORUMS: tuple[XingbaForum, ...] = (
 
 XINGBA_FORUM_BY_SLUG = {f.slug: f for f in XINGBA_FORUMS}
 XINGBA_FORUM_BY_FID = {f.fid: f for f in XINGBA_FORUMS}
+XINGBA_FORUM_BY_NAME = {f.name: f for f in XINGBA_FORUMS}
+
+
+def resolve_forum(value: str) -> XingbaForum:
+    """Accept slug or display name."""
+    value = value.strip()
+    if value in XINGBA_FORUM_BY_SLUG:
+        return XINGBA_FORUM_BY_SLUG[value]
+    if value in XINGBA_FORUM_BY_NAME:
+        return XINGBA_FORUM_BY_NAME[value]
+    raise KeyError(value)

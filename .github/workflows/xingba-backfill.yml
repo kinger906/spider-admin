@@ -4,35 +4,35 @@ name: Xingba Forum Backfill
 on:
   workflow_dispatch:
     inputs:
-      forum_slug:
-        description: "Forum category"
+      forum_name:
+        description: "版块类别"
         required: true
         type: choice
         options:
-          - xingba-forum-798
-          - xingba-forum-280
-          - xingba-forum-233
-          - xingba-forum-103
-          - xingba-forum-723
-          - xingba-forum-96
-          - xingba-forum-70
-          - xingba-forum-232
-          - xingba-forum-135
-          - xingba-forum-525
-          - xingba-forum-134
-          - xingba-forum-713
+          - 杏吧华人下载区
+          - 杏吧华人精品区
+          - 杏吧高清新片区
+          - 杏吧网盘下载区
+          - 杏吧无码BT原创区
+          - 杏吧亚洲无码区
+          - 杏吧中文字幕区
+          - 杏吧特邀新片区
+          - 杏吧欧美区
+          - 杏吧欧美BT区
+          - 杏吧亚洲有码区
+          - 杏吧有码BT原创区
       start_page:
-        description: "Start page (default 1)"
+        description: "起始页（默认 1）"
         required: false
         type: string
         default: "1"
       page_count:
-        description: "Pages to crawl (default 100)"
+        description: "爬取页数（默认 100）"
         required: false
         type: string
         default: "100"
       dry_run:
-        description: "Print plan only"
+        description: "仅打印计划，不执行"
         required: false
         type: boolean
         default: false
@@ -43,7 +43,7 @@ env:
 
 jobs:
   backfill:
-    name: Xingba backfill ${{ github.event.inputs.forum_slug }}
+    name: Xingba backfill ${{ github.event.inputs.forum_name }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
@@ -62,11 +62,11 @@ jobs:
       - name: Run backfill
         working-directory: crawlers
         env:
-          XINGBA_SLUG: ${{ github.event.inputs.forum_slug }}
+          XINGBA_FORUM: ${{ github.event.inputs.forum_name }}
           XINGBA_START_PAGE: ${{ github.event.inputs.start_page }}
           XINGBA_PAGE_COUNT: ${{ github.event.inputs.page_count }}
         run: |
-          ARGS=(--trigger ci --slug "${{ github.event.inputs.forum_slug }}")
+          ARGS=(--trigger ci --forum "${{ github.event.inputs.forum_name }}")
           ARGS+=(--start "${{ github.event.inputs.start_page || '1' }}")
           ARGS+=(--pages "${{ github.event.inputs.page_count || '100' }}")
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
