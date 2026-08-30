@@ -5,6 +5,7 @@ import traceback
 import io
 from .base import BaseCrawler
 from . import db
+from .registry import crawler_file_path
 
 logger = logging.getLogger("crawler.runner")
 
@@ -27,7 +28,7 @@ def run_crawler(
         name=meta.name,
         slug=meta.slug,
         description=meta.description,
-        file_path=f"crawlers/spiders/{meta.slug}.py",
+        file_path=crawler_file_path(meta.slug),
         schedule=meta.schedule,
         config=meta.config,
     )

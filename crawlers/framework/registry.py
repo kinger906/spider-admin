@@ -9,6 +9,12 @@ from .base import BaseCrawler
 from . import db
 
 
+def crawler_file_path(slug: str) -> str:
+    if slug.startswith("xingba-forum-"):
+        return "crawlers/spiders/xingba_forum.py"
+    return f"crawlers/spiders/{slug}.py"
+
+
 class CrawlerRegistry:
     _crawlers: dict[str, type[BaseCrawler]] = {}
 
@@ -55,7 +61,7 @@ class CrawlerRegistry:
                 name=meta.name,
                 slug=meta.slug,
                 description=meta.description,
-                file_path=f"crawlers/spiders/{meta.slug}.py",
+                file_path=crawler_file_path(meta.slug),
                 schedule=meta.schedule,
                 config=meta.config,
             )

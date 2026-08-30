@@ -1,20 +1,27 @@
 name: Xingba Forum Incremental
 
-# 日常增量：按最后发表倒序抓最新 1~5 页
+# 日常增量：按顺序爬全部版块，每类最新 6 页，每 4 小时
 on:
   schedule:
     - cron: "0 */4 * * *"
   workflow_dispatch:
+    inputs:
+      pages:
+        description: "Latest pages per forum (default 6)"
+        required: false
+        type: string
+        default: "6"
 
 env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
   API_SECRET: ${{ secrets.API_SECRET }}
+  XINGBA_INCREMENTAL_PAGES: ${{ github.event.inputs.pages || '6' }}
 
 jobs:
   incremental:
-    name: Xingba latest 5 pages
+    name: Xingba all forums latest pages
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +35,6 @@ jobs:
         working-directory: crawlers
         run: pip install -r requirements.txt
 
-      - name: Crawl latest 5 pages
+      - name: Crawl all forums sequentially
         working-directory: crawlers
-        run: python run.py xingba-forum-798 --start-page 1 --end-page 5 --trigger ci
+        run: python run_xingba_incremental.py --trigger ci

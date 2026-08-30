@@ -1,8 +1,4 @@
-"""杏吧「华人性爱下载区」版块列表爬虫（fid=798）。
-
-按「最后发表」倒序分页抓取普通主题：标题、精确发表时间、下载链接。
-跳过全局置顶/公告。
-"""
+"""杏吧版块列表爬虫（多 fid 共用实现）。"""
 
 from __future__ import annotations
 
@@ -16,30 +12,11 @@ from bs4 import BeautifulSoup
 
 from framework import BaseCrawler, CrawlerRegistry
 from framework.base import CrawlerMeta
+from spiders.xingba_forums import XINGBA_FORUMS, XingbaForum
 
 
-class XingbaForum798Crawler(BaseCrawler):
-    meta = CrawlerMeta(
-        name="杏吧华人下载区",
-        slug="xingba-forum-798",
-        description="按最后发表倒序爬取杏吧华人性爱下载区(fid=798)标题、发表时间与下载链接",
-        schedule="0 */4 * * *",
-        config={
-            "retry_limit": 2,
-            "start_page": 1,
-            "end_page": 5,
-            "page_delay": 1.5,
-            "detail_delay": 0.8,
-            "base_url": "https://www.tixanshiyanzhi.pro",
-            "list_path": (
-                "/forum.php?mod=forumdisplay&fid=798"
-                "&filter=lastpost&orderby=lastpost"
-            ),
-            # 游标 backfill_next_page 只存在 DB，勿写进默认 config，避免注册时被覆盖
-            "backfill_end_page": 1000,
-            "backfill_batch_size": 30,
-        },
-    )
+class XingbaForumCrawler(BaseCrawler):
+    """按「最后发表」倒序抓取版块帖子：标题、发表时间、下载链接。"""
 
     HEADERS = {
         "User-Agent": (
@@ -63,6 +40,8 @@ class XingbaForum798Crawler(BaseCrawler):
     )
     SKIP_TITLE_RE = re.compile(r"(公告|版规|置顶说明)")
 
+    forum: XingbaForum
+
     def crawl(self) -> list[dict]:
         cfg = self.meta.config
         self._apply_page_env_overrides(cfg)
@@ -71,8 +50,10 @@ class XingbaForum798Crawler(BaseCrawler):
         start_page = int(cfg.get("start_page") or 1)
         if cfg.get("end_page") is not None:
             end_page = int(cfg["end_page"])
+        elif cfg.get("page_count") is not None:
+            end_page = start_page + int(cfg["page_count"]) - 1
         else:
-            end_page = start_page + int(cfg.get("max_pages") or 10) - 1
+            end_page = start_page + int(cfg.get("max_pages") or 6) - 1
         if end_page < start_page:
             raise RuntimeError(f"end_page({end_page}) < start_page({start_page})")
         page_delay = float(cfg.get("page_delay") or 1.5)
@@ -88,13 +69,18 @@ class XingbaForum798Crawler(BaseCrawler):
         fetched_total = 0
         self._incremental_fetched = 0
 
+        forum_name = self.forum.name
+        fid = self.forum.fid
+
         for page in range(start_page, end_page + 1):
             self.wait_if_paused()
             if self.should_stop:
                 break
 
             list_url = self._list_url(base, page)
-            self.logger.info(f"Fetching list page {page}/{end_page} (from {start_page}): {list_url}")
+            self.logger.info(
+                f"[{forum_name} fid={fid}] list page {page}/{end_page}: {list_url}"
+            )
             soup = self._get_soup(session, list_url)
             threads = self._parse_list(soup, base)
             if not threads:
@@ -118,6 +104,8 @@ class XingbaForum798Crawler(BaseCrawler):
                     {
                         "data": {
                             "thread_id": tid,
+                            "forum_id": fid,
+                            "forum_name": forum_name,
                             "title": item["title"],
                             "category": item.get("category") or "",
                             "published_at": published_at,
@@ -134,40 +122,33 @@ class XingbaForum798Crawler(BaseCrawler):
             if persist and page_records:
                 saved = persist(page_records)
                 self.logger.info(
-                    f"Page {page}: {len(threads)} threads, {len(page_records)} fetched, {saved} new saved"
+                    f"Page {page}: {len(page_records)} fetched, {saved} new saved"
                 )
             else:
                 records.extend(page_records)
-                self.logger.info(f"Page {page}: {len(threads)} threads, {len(page_records)} fetched")
+                self.logger.info(f"Page {page}: {len(page_records)} fetched")
 
             if page < end_page:
                 time.sleep(page_delay)
 
-        self.logger.info(f"Fetched {fetched_total} threads total")
+        self.logger.info(f"[{forum_name}] fetched {fetched_total} threads total")
         return records
 
     @staticmethod
     def _apply_page_env_overrides(cfg: dict) -> None:
-        """Allow CI/CLI to override pages via env without editing code."""
         start = os.environ.get("XINGBA_START_PAGE") or os.environ.get("START_PAGE")
         end = os.environ.get("XINGBA_END_PAGE") or os.environ.get("END_PAGE")
+        count = os.environ.get("XINGBA_PAGE_COUNT")
         if start:
             cfg["start_page"] = int(start)
         if end:
             cfg["end_page"] = int(end)
+        if count:
+            cfg["page_count"] = int(count)
 
     def _list_url(self, base: str, page: int) -> str:
-        path = str(
-            self.meta.config.get("list_path")
-            or (
-                "/forum.php?mod=forumdisplay&fid=798"
-                "&filter=lastpost&orderby=lastpost"
-            )
-        )
-        if not path.startswith("http"):
-            url = f"{base}{path if path.startswith('/') else '/' + path}"
-        else:
-            url = path
+        path = self.forum.list_path
+        url = f"{base}{path if path.startswith('/') else '/' + path}"
         sep = "&" if "?" in url else "?"
         return f"{url}{sep}page={page}"
 
@@ -185,6 +166,9 @@ class XingbaForum798Crawler(BaseCrawler):
                 time.sleep(1.5 + attempt)
         raise RuntimeError(f"Failed to fetch {url}: {last_err}")
 
+    def _canonical_thread_url(self, base: str, thread_id: str) -> str:
+        return f"{base.rstrip('/')}/thread-{thread_id}-1-1.html"
+
     def _parse_list(self, soup: BeautifulSoup, base: str) -> list[dict]:
         items: list[dict] = []
         for tbody in soup.select("tbody[id^=normalthread_]"):
@@ -197,20 +181,17 @@ class XingbaForum798Crawler(BaseCrawler):
             if not title or self.SKIP_TITLE_RE.search(title):
                 continue
 
-            href = title_a.get("href") or f"thread-{tid}-1-1.html"
-            url = urljoin(base + "/", href)
+            url = self._canonical_thread_url(base, tid)
 
             cat_el = tbody.select_one("th em a") or tbody.select_one("em a")
             category = cat_el.get_text(strip=True).strip("[]") if cat_el else ""
-            # 列表页通常只有日期，精确到时分秒在详情页补齐
-            published_at = self._parse_list_published_at(tbody)
 
             items.append(
                 {
                     "thread_id": tid,
                     "title": title,
                     "category": category,
-                    "published_at": published_at,
+                    "published_at": self._parse_list_published_at(tbody),
                     "url": url,
                 }
             )
@@ -239,7 +220,6 @@ class XingbaForum798Crawler(BaseCrawler):
         return ""
 
     def _parse_detail_published_at(self, soup: BeautifulSoup) -> str:
-        """详情页一楼「发表于 YYYY-M-D HH:MM:SS」。"""
         em = soup.select_one("em[id^=authorposton]")
         if em:
             span = em.select_one("span[title]")
@@ -249,7 +229,6 @@ class XingbaForum798Crawler(BaseCrawler):
             m = self.PUBLISHED_RE.search(text)
             if m:
                 return m.group(1)
-        # fallback: first datetime in postlist
         postlist = soup.select_one("#postlist")
         blob = postlist.get_text(" ", strip=True) if postlist else soup.get_text(" ", strip=True)
         m = self.PUBLISHED_RE.search(blob)
@@ -297,13 +276,10 @@ class XingbaForum798Crawler(BaseCrawler):
             add(m)
         for m in self.CLOUD_RE.findall(text):
             add(m)
-
         for href in hrefs:
             add(href)
-
         for h in self.HASH_RE.findall(text):
             add(f"magnet:?xt=urn:btih:{h.upper()}")
-
         return found
 
     def _is_download_candidate(self, link: str) -> bool:
@@ -328,8 +304,6 @@ class XingbaForum798Crawler(BaseCrawler):
             )
         ):
             return True
-
-        path = urlparse(link).path.lower()
         if any(
             x in low
             for x in (
@@ -337,7 +311,6 @@ class XingbaForum798Crawler(BaseCrawler):
                 "member.php",
                 "misc.php",
                 "home.php",
-                "forum-798",
                 "forum.php?mod=forumdisplay",
                 "forum.php?mod=viewthread",
                 "thread-",
@@ -354,9 +327,36 @@ class XingbaForum798Crawler(BaseCrawler):
             return False
         if "forum.php?mod=attachment" in low and "nothumb=yes" in low:
             return False
-        if path.endswith(".torrent"):
+        if urlparse(link).path.lower().endswith(".torrent"):
             return True
         return False
 
 
-CrawlerRegistry.register(XingbaForum798Crawler)
+def _make_crawler_class(forum: XingbaForum) -> type[XingbaForumCrawler]:
+    def _factory(f: XingbaForum = forum) -> type[XingbaForumCrawler]:
+        class _Crawler(XingbaForumCrawler):
+            forum = f
+            meta = CrawlerMeta(
+                name=f.name,
+                slug=f.slug,
+                description=f"按最后发表倒序爬取{f.name}(fid={f.fid})",
+                schedule="0 */4 * * *",
+                config={
+                    "retry_limit": 2,
+                    "fid": f.fid,
+                    "start_page": 1,
+                    "end_page": 6,
+                    "page_delay": 1.5,
+                    "detail_delay": 0.8,
+                    "base_url": "https://www.tixanshiyanzhi.pro",
+                },
+            )
+
+        _Crawler.__name__ = f"XingbaForum{f.fid}Crawler"
+        return _Crawler
+
+    return _factory()
+
+
+for _forum in XINGBA_FORUMS:
+    CrawlerRegistry.register(_make_crawler_class(_forum))

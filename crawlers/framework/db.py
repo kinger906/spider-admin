@@ -132,25 +132,45 @@ def check_url_exists(crawler_id: int, url: str) -> bool:
         return cur.fetchone() is not None
 
 
+def _record_exists(cur, crawler_id: int, data: dict, url: str | None) -> bool:
+    """Dedup by data.thread_id when present, else by url."""
+    thread_id = data.get("thread_id")
+    if thread_id is not None and str(thread_id).strip():
+        cur.execute(
+            """
+            SELECT 1 FROM spider_data_records
+            WHERE crawler_id = %s AND data->>'thread_id' = %s
+            LIMIT 1
+            """,
+            (crawler_id, str(thread_id)),
+        )
+        if cur.fetchone():
+            return True
+        return False
+    if url:
+        cur.execute(
+            "SELECT 1 FROM spider_data_records WHERE crawler_id = %s AND url = %s LIMIT 1",
+            (crawler_id, url),
+        )
+        return cur.fetchone() is not None
+    return False
+
+
 def save_records_dedup(crawler_id: int, task_id: int, records: list[dict]) -> int:
-    """Save records with URL-based deduplication. Returns count of new records saved."""
+    """Save records with deduplication (thread_id preferred, else url)."""
     if not records:
         return 0
     with get_connection() as conn:
         cur = conn.cursor()
         new_count = 0
         for r in records:
+            data = r.get("data", r)
             url = r.get("url")
-            if url:
-                cur.execute(
-                    "SELECT 1 FROM spider_data_records WHERE crawler_id = %s AND url = %s LIMIT 1",
-                    (crawler_id, url),
-                )
-                if cur.fetchone():
-                    continue
+            if _record_exists(cur, crawler_id, data if isinstance(data, dict) else {}, url):
+                continue
             cur.execute(
                 "INSERT INTO spider_data_records (crawler_id, task_id, data, url) VALUES (%s, %s, %s, %s)",
-                (crawler_id, task_id, Json(r.get("data", r)), url),
+                (crawler_id, task_id, Json(data), url),
             )
             new_count += 1
         return new_count
