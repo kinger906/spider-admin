@@ -16,6 +16,7 @@ env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
   API_SECRET: ${{ secrets.API_SECRET }}
   XINGBA_INCREMENTAL_PAGES: ${{ github.event.inputs.pages || '6' }}
+  PYTHONUNBUFFERED: "1"
 
 jobs:
   incremental:

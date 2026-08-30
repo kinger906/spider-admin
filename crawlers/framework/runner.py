@@ -1,13 +1,40 @@
 """Task runner with retry logic, logging, and DB persistence."""
 
-import logging
-import traceback
 import io
+import logging
+import sys
+import traceback
+
 from .base import BaseCrawler
 from . import db
 from .registry import crawler_file_path
 
 logger = logging.getLogger("crawler.runner")
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
+
+
+def _attach_crawler_logging(log_stream: io.StringIO) -> list[logging.Handler]:
+    """Mirror crawler logs to stdout (CI console) and an in-memory buffer (DB)."""
+    formatter = logging.Formatter(_LOG_FORMAT)
+    handlers: list[logging.Handler] = []
+
+    for stream in (log_stream, sys.stdout):
+        h = logging.StreamHandler(stream)
+        h.setFormatter(formatter)
+        handlers.append(h)
+
+    crawler_logger = logging.getLogger("crawler")
+    crawler_logger.setLevel(logging.INFO)
+    crawler_logger.propagate = False
+    for h in handlers:
+        crawler_logger.addHandler(h)
+    return handlers
+
+
+def _detach_crawler_logging(handlers: list[logging.Handler]) -> None:
+    crawler_logger = logging.getLogger("crawler")
+    for h in handlers:
+        crawler_logger.removeHandler(h)
 
 
 def run_crawler(
@@ -20,9 +47,7 @@ def run_crawler(
         meta.config.update(config_overrides)
 
     log_stream = io.StringIO()
-    handler = logging.StreamHandler(log_stream)
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    logging.getLogger("crawler").addHandler(handler)
+    handlers = _attach_crawler_logging(log_stream)
 
     crawler_id = db.register_crawler(
         name=meta.name,
@@ -65,7 +90,7 @@ def run_crawler(
                 f"Task {task_id} succeeded: {new_count} new / fetched={len(records) + getattr(instance, '_incremental_fetched', 0)}",
             )
 
-            logging.getLogger("crawler").removeHandler(handler)
+            _detach_crawler_logging(handlers)
             return {
                 "status": "success",
                 "task_id": task_id,
@@ -88,5 +113,5 @@ def run_crawler(
     db.finish_task(task_id, crawler_id, "failed", error_message=error_msg, logs=log_stream.getvalue())
     db.save_log("error", meta.slug, f"Task {task_id} failed after {attempt} attempts", {"error": str(last_error)})
 
-    logging.getLogger("crawler").removeHandler(handler)
+    _detach_crawler_logging(handlers)
     return {"status": "failed", "task_id": task_id, "error": str(last_error)}
