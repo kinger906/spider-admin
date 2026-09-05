@@ -1,11 +1,7 @@
 name: Run Crawlers
 
+# 仅手动触发，不再定时跑
 on:
-  schedule:
-    # HN: every 6 hours
-    - cron: "0 */6 * * *"
-    # GitHub Trending: daily at 08:00 UTC
-    - cron: "0 8 * * *"
   workflow_dispatch:
     inputs:
       crawler:
