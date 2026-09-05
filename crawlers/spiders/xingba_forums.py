@@ -38,6 +38,13 @@ XINGBA_FORUM_BY_SLUG = {f.slug: f for f in XINGBA_FORUMS}
 XINGBA_FORUM_BY_FID = {f.fid: f for f in XINGBA_FORUMS}
 XINGBA_FORUM_BY_NAME = {f.name: f for f in XINGBA_FORUMS}
 
+# 自动回填：从第 1 页起，每次 6 页，每 2 小时，游标写在 crawler.config 里，直到 1000 页
+AUTO_BACKFILL_START_PAGE = 1
+AUTO_BACKFILL_PAGES_PER_RUN = 6
+AUTO_BACKFILL_MAX_PAGE = 1000
+AUTO_BACKFILL_CURSOR_KEY = "backfill_next_page"
+AUTO_BACKFILL_CRON = "0 */2 * * *"
+
 
 def resolve_forum(value: str) -> XingbaForum:
     """Accept slug or display name."""
