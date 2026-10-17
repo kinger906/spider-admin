@@ -12,6 +12,8 @@ from . import db
 def crawler_file_path(slug: str) -> str:
     if slug.startswith("xingba-forum-"):
         return "crawlers/spiders/xingba_forum.py"
+    if slug.startswith("xingba-spa-"):
+        return "crawlers/spiders/xingba_spa_forum.py"
     return f"crawlers/spiders/{slug}.py"
 
 

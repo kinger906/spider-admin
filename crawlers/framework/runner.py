@@ -68,6 +68,8 @@ def run_crawler(
         try:
             instance = crawler_cls()
             instance._incremental_saved = 0
+            instance._task_id = task_id  # type: ignore[attr-defined]
+            instance._crawler_id = crawler_id  # type: ignore[attr-defined]
 
             def _persist(batch: list[dict]) -> int:
                 n = db.save_records_dedup(crawler_id, task_id, batch)

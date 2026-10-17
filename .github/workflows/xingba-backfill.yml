@@ -1,9 +1,14 @@
-name: Xingba Forum Backfill
+name: Xingba Forum Backfill (DISABLED)
 
-# 手动回填：选择版块 + 起始页 + 爬取页数（无游标、无定时）
+# 已停用：改由 Xingba SPA Backfill 接管。保留文件仅供必要时手动恢复。
+# 手动回填已迁移到 .github/workflows/xingba-spa-backfill.yml
 on:
   workflow_dispatch:
     inputs:
+      confirm:
+        description: "Type ENABLE to run the legacy Discuz backfill"
+        required: true
+        type: string
       forum_name:
         description: "版块类别"
         required: true
@@ -44,7 +49,8 @@ env:
 
 jobs:
   backfill:
-    name: Xingba backfill ${{ github.event.inputs.forum_name }}
+    name: Xingba backfill ${{ github.event.inputs.forum_name }} (legacy)
+    if: ${{ github.event.inputs.confirm == 'ENABLE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:

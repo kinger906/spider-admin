@@ -1,26 +1,25 @@
-name: Xingba Forum Incremental
+name: Xingba Forum Incremental (DISABLED)
 
-# 日常增量：按顺序爬全部版块，每类最新 6 页，每 4 小时
+# 已停用：改由 Xingba SPA Incremental 接管。保留文件仅供必要时手动恢复。
+# 日常增量已迁移到 .github/workflows/xingba-spa-incremental.yml
 on:
-  schedule:
-    - cron: "0 */4 * * *"
   workflow_dispatch:
     inputs:
-      pages:
-        description: "Latest pages per forum (default 6)"
-        required: false
+      confirm:
+        description: "Type ENABLE to run the legacy Discuz crawler"
+        required: true
         type: string
-        default: "5"
 
 env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
   API_SECRET: ${{ secrets.API_SECRET }}
-  XINGBA_INCREMENTAL_PAGES: ${{ github.event.inputs.pages || '6' }}
+  XINGBA_INCREMENTAL_PAGES: "6"
   PYTHONUNBUFFERED: "1"
 
 jobs:
   incremental:
-    name: Xingba all forums latest pages
+    name: Xingba all forums latest pages (legacy)
+    if: ${{ github.event.inputs.confirm == 'ENABLE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:

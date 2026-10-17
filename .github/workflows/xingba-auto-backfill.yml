@@ -1,11 +1,14 @@
-name: Xingba Forum Auto Backfill
+name: Xingba Forum Auto Backfill (DISABLED)
 
-# 自动回填：全部版块按 DB 游标推进，每次 6 页，每 2 小时，直到 1000 页
+# 已停用：改由 Xingba SPA Auto Backfill 接管。保留文件仅供必要时手动恢复。
+# 自动回填已迁移到 .github/workflows/xingba-spa-auto-backfill.yml
 on:
-  schedule:
-    - cron: "0 */2 * * *"
   workflow_dispatch:
     inputs:
+      confirm:
+        description: "Type ENABLE to run the legacy Discuz auto backfill"
+        required: true
+        type: string
       pages:
         description: "Pages per forum this run (default 6)"
         required: false
@@ -31,7 +34,8 @@ env:
 
 jobs:
   auto-backfill:
-    name: Xingba auto backfill (cursor)
+    name: Xingba auto backfill (cursor, legacy)
+    if: ${{ github.event.inputs.confirm == 'ENABLE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:

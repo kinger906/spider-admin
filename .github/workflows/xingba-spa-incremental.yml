@@ -1,0 +1,43 @@
+name: Xingba SPA Incremental
+
+# 日常增量：SPA 华人下载区，新主题+半年，最新 6 页，每 4 小时
+on:
+  schedule:
+    - cron: "0 */4 * * *"
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: "Latest pages (default 6)"
+        required: false
+        type: string
+        default: "6"
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  API_SECRET: ${{ secrets.API_SECRET }}
+  XINGBA_SPA_USER: ${{ secrets.XINGBA_SPA_USER }}
+  XINGBA_SPA_PASS: ${{ secrets.XINGBA_SPA_PASS }}
+  XINGBA_SPA_INCREMENTAL_PAGES: ${{ github.event.inputs.pages || '6' }}
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  incremental:
+    name: Xingba SPA latest pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: crawlers/requirements.txt
+
+      - name: Install dependencies
+        working-directory: crawlers
+        run: pip install -r requirements.txt
+
+      - name: Crawl SPA forum
+        working-directory: crawlers
+        run: python run_xingba_spa_incremental.py --trigger ci
