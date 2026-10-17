@@ -101,6 +101,8 @@ def run_crawler(
                 "last_page": getattr(instance, "_last_completed_page", None),
                 "exhausted": bool(getattr(instance, "_exhausted", False)),
                 "stopped_by_budget": bool(getattr(instance, "_stopped_by_budget", False)),
+                "offset_capped": bool(getattr(instance, "_offset_capped", False)),
+                "oldest_create_time": getattr(instance, "_oldest_create_time", None),
             }
         except Exception as e:
             last_error = e

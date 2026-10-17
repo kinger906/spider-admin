@@ -22,7 +22,11 @@ BEIJING = ZoneInfo("Asia/Shanghai")
 
 from framework import BaseCrawler, CrawlerRegistry
 from framework.base import CrawlerMeta
-from spiders.xingba_spa_client import XingbaSpaClient
+from spiders.xingba_spa_client import (
+    XingbaSpaClient,
+    PageOffsetTooLarge,
+    max_safe_page,
+)
 
 
 class XingbaSpaForumCrawler(BaseCrawler):
@@ -93,10 +97,29 @@ class XingbaSpaForumCrawler(BaseCrawler):
         realm_id = str(cfg.get("realm_id") or "666a736faa91b688401ae8da")
         channel_id = str(cfg.get("channel_id") or "132")
         sort_field = str(cfg.get("sort_field") or "create_time")
+        create_time_lt_raw = cfg.get("create_time_lt")
+        create_time_lt: int | None = None
+        if create_time_lt_raw not in (None, "", 0, "0"):
+            try:
+                create_time_lt = int(create_time_lt_raw)
+            except (TypeError, ValueError):
+                create_time_lt = None
 
         self._last_completed_page = start_page - 1
         self._exhausted = False
         self._stopped_by_budget = False
+        self._offset_capped = False
+        self._oldest_create_time: int | None = None
+
+        safe_page = max_safe_page(page_size)
+        if start_page > safe_page:
+            # 交给 continuous 用时间窗翻页；本轮不硬撞 API
+            self._offset_capped = True
+            self.logger.warning(
+                f"start_page={start_page} > safe_page={safe_page} "
+                f"(limit*{safe_page}≈API max); skip query, need time-window roll"
+            )
+            return []
 
         user_name = (
             os.environ.get("XINGBA_SPA_USER")
@@ -142,22 +165,47 @@ class XingbaSpaForumCrawler(BaseCrawler):
                 )
                 break
 
+            if page > safe_page:
+                self._offset_capped = True
+                self.logger.info(
+                    f"Hit API page cap at page={page} (safe<={safe_page}); "
+                    f"oldest_create_time={self._oldest_create_time}"
+                )
+                break
+
             self.logger.info(
                 f"[SPA {forum_name} cat={category_id}] page {page}/{end_page} "
                 f"size={page_size} range={range_days_i if range_days_i is not None else 'all'}"
+                f"{f' before<{create_time_lt}' if create_time_lt else ''}"
             )
-            result = client.query_posts(
-                category_id=category_id,
-                page=page,
-                limit=page_size,
-                range_days=range_days_i,
-                sort_field=sort_field,
-            )
+            try:
+                result = client.query_posts(
+                    category_id=category_id,
+                    page=page,
+                    limit=page_size,
+                    range_days=range_days_i,
+                    sort_field=sort_field,
+                    create_time_lt=create_time_lt,
+                )
+            except PageOffsetTooLarge as e:
+                self._offset_capped = True
+                self.logger.warning(f"API offset capped: {e}")
+                break
             items = result.get("list") or []
             if not items:
                 self._exhausted = True
                 self.logger.info("No more posts on this page (exhausted)")
                 break
+
+            for it in items:
+                try:
+                    ts = int(it.get("create_time") or 0)
+                except (TypeError, ValueError):
+                    ts = 0
+                if ts > 0 and (
+                    self._oldest_create_time is None or ts < self._oldest_create_time
+                ):
+                    self._oldest_create_time = ts
 
             page_rows: list[dict] = []
             pending: list[dict] = []

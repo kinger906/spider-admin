@@ -18,6 +18,18 @@ FALLBACK_Z_S3 = "https://photos.x5ewt.com"
 
 JWT_RE = re.compile(r"eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+")
 
+# Search API: limit * page 不能过大（实测约 10000）
+MAX_PAGE_PRODUCT = 10000
+
+
+class PageOffsetTooLarge(RuntimeError):
+    """Search/Social/Query 返回 limit * page is too large。"""
+
+
+def max_safe_page(limit: int, product: int = MAX_PAGE_PRODUCT) -> int:
+    lim = max(1, int(limit or 1))
+    return max(1, product // lim)
+
 
 def _bdecode(data: bytes, i: int = 0) -> tuple[Any, int]:
     """最小 bencode 解码（只够算 infohash / magnet）。"""
@@ -183,8 +195,18 @@ class XingbaSpaClient:
         limit: int = 16,
         range_days: int | None = 180,
         sort_field: str = "create_time",
+        create_time_lt: int | None = None,
     ) -> dict[str, Any]:
-        """按新主题排序拉取一页帖子。返回 {count, list}。"""
+        """按新主题排序拉取一页帖子。返回 {count, list}。
+
+        create_time_lt：时间窗上界（不含），用于突破 limit*page 深度限制。
+        """
+        page_i = int(page)
+        limit_i = int(limit)
+        if page_i * limit_i > MAX_PAGE_PRODUCT:
+            raise PageOffsetTooLarge(
+                f"limit*page too large locally: {limit_i}*{page_i}>{MAX_PAGE_PRODUCT}"
+            )
         and_filters: list[dict[str, Any]] = [
             {"field": "categories_id", "op": "$eq", "value": str(category_id)},
             {"field": "status", "op": "$in", "value": [1, 8]},
@@ -194,11 +216,15 @@ class XingbaSpaClient:
             and_filters.append(
                 {"field": "create_time", "op": "$gte", "value": gte}
             )
+        if create_time_lt is not None:
+            and_filters.append(
+                {"field": "create_time", "op": "$lt", "value": int(create_time_lt)}
+            )
         payload = [
             {
                 "name": "social.post",
-                "limit": int(limit),
-                "page": int(page),
+                "limit": limit_i,
+                "page": page_i,
                 "and": and_filters,
                 "sort": [{"field": sort_field, "order": "DESC"}],
             }
@@ -224,6 +250,9 @@ class XingbaSpaClient:
                 resp.raise_for_status()
                 data = resp.json()
                 if str(data.get("status", "")).upper() != "SUCCESS":
+                    msg = str(data.get("msg") or data)
+                    if "limit * page is too large" in msg or "too large" in msg:
+                        raise PageOffsetTooLarge(f"query failed: {data}")
                     raise RuntimeError(f"query failed: {data}")
                 block = (data.get("msg") or [None])[0] or {}
                 self.searches = [search] + [x for x in self.searches if x != search]
@@ -231,6 +260,8 @@ class XingbaSpaClient:
                     "count": int(block.get("count") or 0),
                     "list": list(block.get("list") or []),
                 }
+            except PageOffsetTooLarge:
+                raise
             except Exception as e:
                 last_err = e
         raise RuntimeError(f"Search/Social/Query failed: {last_err}")
