@@ -1,6 +1,7 @@
 import { createAsync, A } from "@solidjs/router";
 import { For, Suspense } from "solid-js";
 import { getCrawlers, updateCrawler } from "~/lib/api";
+import { formatBeijing } from "~/lib/datetime";
 import Card from "~/components/Card";
 import StatusBadge from "~/components/StatusBadge";
 
@@ -41,7 +42,7 @@ export default function CrawlersPage() {
                 </div>
                 <div class="flex items-center justify-between mt-4 pt-3 border-t border-gray-800">
                   <span class="text-xs text-gray-600">
-                    最后运行: {crawler.lastRunAt ? new Date(crawler.lastRunAt).toLocaleString("zh-CN") : "从未"}
+                    最后运行: {formatBeijing(crawler.lastRunAt, "从未")}
                   </span>
                   <button
                     onClick={() => toggleEnabled(crawler.id, crawler.enabled)}

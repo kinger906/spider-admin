@@ -1,6 +1,7 @@
 import { createAsync } from "@solidjs/router";
 import { For, Show, Suspense } from "solid-js";
 import { getDashboardStats } from "~/lib/api";
+import { formatBeijing } from "~/lib/datetime";
 import Card from "~/components/Card";
 import StatusBadge from "~/components/StatusBadge";
 
@@ -46,7 +47,7 @@ export default function Dashboard() {
                             <td class="py-2.5"><StatusBadge status={task.status} /></td>
                             <td class="py-2.5 text-gray-400">{task.itemsCount}</td>
                             <td class="py-2.5 text-gray-500">{task.triggeredBy}</td>
-                            <td class="py-2.5 text-gray-500">{new Date(task.createdAt).toLocaleString("zh-CN")}</td>
+                            <td class="py-2.5 text-gray-500">{formatBeijing(task.createdAt)}</td>
                           </tr>
                         )}
                       </For>

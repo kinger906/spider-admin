@@ -1,6 +1,7 @@
 import { createAsync } from "@solidjs/router";
 import { For, Suspense, createSignal } from "solid-js";
 import { getTasks } from "~/lib/api";
+import { formatBeijing } from "~/lib/datetime";
 import Card from "~/components/Card";
 import StatusBadge from "~/components/StatusBadge";
 
@@ -39,8 +40,8 @@ export default function TasksPage() {
                       <td class="py-2.5 text-gray-400">{task.itemsCount}</td>
                       <td class="py-2.5 text-gray-400">{task.retryCount}</td>
                       <td class="py-2.5 text-gray-500">{task.triggeredBy}</td>
-                      <td class="py-2.5 text-gray-500">{task.startedAt ? new Date(task.startedAt).toLocaleString("zh-CN") : "-"}</td>
-                      <td class="py-2.5 text-gray-500">{task.finishedAt ? new Date(task.finishedAt).toLocaleString("zh-CN") : "-"}</td>
+                      <td class="py-2.5 text-gray-500">{formatBeijing(task.startedAt)}</td>
+                      <td class="py-2.5 text-gray-500">{formatBeijing(task.finishedAt)}</td>
                       <td class="py-2.5 text-red-400 max-w-[200px] truncate">{task.errorMessage || "-"}</td>
                     </tr>
                   )}

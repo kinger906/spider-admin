@@ -1,6 +1,7 @@
 import { createAsync, useParams, A, action, useAction } from "@solidjs/router";
 import { Show, Suspense, For } from "solid-js";
 import { getCrawler, getTasks, triggerCrawler, pauseCrawler, stopCrawler } from "~/lib/api";
+import { formatBeijing } from "~/lib/datetime";
 import Card from "~/components/Card";
 import StatusBadge from "~/components/StatusBadge";
 
@@ -63,7 +64,7 @@ export default function CrawlerDetail() {
                   </div>
                   <div>
                     <dt class="text-gray-500">最后运行</dt>
-                    <dd class="text-gray-200 mt-1">{c().lastRunAt ? new Date(c().lastRunAt).toLocaleString("zh-CN") : "从未"}</dd>
+                    <dd class="text-gray-200 mt-1">{formatBeijing(c().lastRunAt, "从未")}</dd>
                   </div>
                 </dl>
               </Card>
@@ -91,7 +92,7 @@ export default function CrawlerDetail() {
                               <td class="py-2.5 text-gray-400">{task.itemsCount}</td>
                               <td class="py-2.5 text-gray-400">{task.retryCount}</td>
                               <td class="py-2.5 text-gray-500">{task.triggeredBy}</td>
-                              <td class="py-2.5 text-gray-500">{new Date(task.createdAt).toLocaleString("zh-CN")}</td>
+                              <td class="py-2.5 text-gray-500">{formatBeijing(task.createdAt)}</td>
                             </tr>
                           )}
                         </For>

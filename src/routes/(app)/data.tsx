@@ -1,6 +1,7 @@
 import { createAsync } from "@solidjs/router";
 import { For, Suspense, createSignal, Show } from "solid-js";
 import { getDataRecords, getCrawlers } from "~/lib/api";
+import { formatBeijing } from "~/lib/datetime";
 import Card from "~/components/Card";
 
 export default function DataPage() {
@@ -94,7 +95,7 @@ export default function DataPage() {
                       <td class="py-2.5 text-gray-400 max-w-[400px]">
                         <pre class="text-xs whitespace-pre-wrap break-all">{JSON.stringify(record.data, null, 1)}</pre>
                       </td>
-                      <td class="py-2.5 text-gray-500 whitespace-nowrap">{new Date(record.createdAt).toLocaleString("zh-CN")}</td>
+                      <td class="py-2.5 text-gray-500 whitespace-nowrap">{formatBeijing(record.createdAt)}</td>
                     </tr>
                   )}
                 </For>

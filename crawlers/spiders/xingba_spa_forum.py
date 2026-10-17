@@ -14,8 +14,11 @@ from __future__ import annotations
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
+
+BEIJING = ZoneInfo("Asia/Shanghai")
 
 from framework import BaseCrawler, CrawlerRegistry
 from framework.base import CrawlerMeta
@@ -174,7 +177,7 @@ class XingbaSpaForumCrawler(BaseCrawler):
                     if h:
                         download_links.append(f"xingba-att://{h}/{name}".rstrip("/"))
 
-                published_at = self._ts_to_dt(item.get("create_time"))
+                published_at = self._ts_to_beijing_str(item.get("create_time"))
                 title = (item.get("title") or "").strip()
                 tags = item.get("tags") or []
                 if not isinstance(tags, list):
@@ -317,24 +320,29 @@ class XingbaSpaForumCrawler(BaseCrawler):
         return found
 
     @staticmethod
-    def _ts_to_dt(ts: Any) -> datetime | None:
+    def _ts_to_beijing_str(ts: Any) -> str:
+        """Unix timestamp → Beijing wall-clock string for JSON payload."""
         try:
             n = int(ts)
         except Exception:
-            return None
+            return ""
         if n <= 0:
-            return None
+            return ""
         try:
-            return datetime.fromtimestamp(n, tz=timezone.utc).replace(tzinfo=None)
+            return datetime.fromtimestamp(n, tz=BEIJING).strftime("%Y-%m-%d %H:%M:%S")
         except Exception:
-            return None
+            return ""
 
     @staticmethod
     def _record_payload(row: dict) -> dict:
         """JSON-safe payload for spider_data_records (UI)."""
         published = row.get("published_at")
         if isinstance(published, datetime):
-            published = published.strftime("%Y-%m-%d %H:%M:%S")
+            if published.tzinfo is None:
+                published = published.replace(tzinfo=BEIJING)
+            published = published.astimezone(BEIJING).strftime("%Y-%m-%d %H:%M:%S")
+        elif not published:
+            published = XingbaSpaForumCrawler._ts_to_beijing_str(row.get("create_time"))
         return {
             "thread_id": row.get("post_id"),
             "post_id": row.get("post_id"),

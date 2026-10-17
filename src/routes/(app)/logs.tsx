@@ -1,6 +1,7 @@
 import { createAsync } from "@solidjs/router";
 import { For, Suspense, createSignal } from "solid-js";
 import { getSystemLogs } from "~/lib/api";
+import { formatBeijing } from "~/lib/datetime";
 import Card from "~/components/Card";
 
 const levelColors: Record<string, string> = {
@@ -40,7 +41,7 @@ export default function LogsPage() {
             <For each={logs()}>
               {(log) => (
                 <div class="flex gap-3 py-1.5 border-b border-gray-800/50">
-                  <span class="text-gray-600 whitespace-nowrap">{new Date(log.createdAt).toLocaleString("zh-CN")}</span>
+                  <span class="text-gray-600 whitespace-nowrap">{formatBeijing(log.createdAt)}</span>
                   <span class={`uppercase w-12 shrink-0 ${levelColors[log.level] ?? "text-gray-400"}`}>{log.level}</span>
                   <span class="text-gray-500 w-32 shrink-0 truncate">{log.source}</span>
                   <span class="text-gray-300 flex-1">{log.message}</span>
