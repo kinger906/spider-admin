@@ -1,10 +1,10 @@
 """杏吧新版 SPA 版块爬虫（mainPage 内部分页 API）。
 
 目标页示例：
-https://www.bin7sha1n.website/mainPage/666a736faa91b688401ae8da/132/798?filter=publish&range=180
+https://www.bin7sha1n.website/mainPage/666a736faa91b688401ae8da/132/798?filter=publish&range=all
 
 - 排序：新主题（create_time DESC）
-- 时间范围：默认半年（range=180）
+- 时间范围：默认全部（range=all）
 - 分页：Search/Social/Query 的 page/limit（非 Discuz HTML 翻页）
 - 存储：与旧爬虫相同，写入 spider_data_records
 """
@@ -27,10 +27,10 @@ class XingbaSpaForumCrawler(BaseCrawler):
         name="杏吧SPA华人下载区",
         slug="xingba-spa-798",
         description=(
-            "新版 SPA 按新主题+半年范围爬取华人下载区(categories_id=798)，"
+            "新版 SPA 按新主题+全部时间爬取华人下载区(categories_id=798)，"
             "内部分页走 Search/Social/Query"
         ),
-        schedule="0 */4 * * *",
+        schedule="0 */6 * * *",
         config={
             "retry_limit": 2,
             "site_base": "https://www.bin7sha1n.website",
@@ -39,12 +39,13 @@ class XingbaSpaForumCrawler(BaseCrawler):
             "category_id": "798",
             "forum_name": "华人性爱下载",
             "filter": "publish",
-            "range_days": 180,
+            "range_days": "all",
             "page_size": 16,
             "start_page": 1,
             "end_page": 6,
             "page_delay": 1.0,
             "sort_field": "create_time",
+            "time_budget_sec": 0,
         },
     )
 
@@ -75,6 +76,10 @@ class XingbaSpaForumCrawler(BaseCrawler):
         page_delay = float(cfg.get("page_delay") or 1.0)
         range_days = cfg.get("range_days")
         range_days_i = int(range_days) if range_days not in (None, "", "all") else None
+        time_budget_sec = float(cfg.get("time_budget_sec") or 0)
+        deadline = (
+            time.monotonic() + time_budget_sec if time_budget_sec > 0 else None
+        )
         category_id = str(cfg.get("category_id") or "798")
         forum_name = str(cfg.get("forum_name") or "华人性爱下载")
         site_base = str(cfg.get("site_base") or "https://www.bin7sha1n.website").rstrip(
@@ -83,6 +88,10 @@ class XingbaSpaForumCrawler(BaseCrawler):
         realm_id = str(cfg.get("realm_id") or "666a736faa91b688401ae8da")
         channel_id = str(cfg.get("channel_id") or "132")
         sort_field = str(cfg.get("sort_field") or "create_time")
+
+        self._last_completed_page = start_page - 1
+        self._exhausted = False
+        self._stopped_by_budget = False
 
         user_name = (
             os.environ.get("XINGBA_SPA_USER")
@@ -120,10 +129,17 @@ class XingbaSpaForumCrawler(BaseCrawler):
             self.wait_if_paused()
             if self.should_stop:
                 break
+            if deadline is not None and time.monotonic() >= deadline:
+                self._stopped_by_budget = True
+                self.logger.info(
+                    f"Time budget reached before page {page}; "
+                    f"last_completed={self._last_completed_page}"
+                )
+                break
 
             self.logger.info(
                 f"[SPA {forum_name} cat={category_id}] page {page}/{end_page} "
-                f"size={page_size} range_days={range_days_i}"
+                f"size={page_size} range={range_days_i if range_days_i is not None else 'all'}"
             )
             result = client.query_posts(
                 category_id=category_id,
@@ -134,7 +150,8 @@ class XingbaSpaForumCrawler(BaseCrawler):
             )
             items = result.get("list") or []
             if not items:
-                self.logger.info("No more posts on this page")
+                self._exhausted = True
+                self.logger.info("No more posts on this page (exhausted)")
                 break
 
             page_rows: list[dict] = []
@@ -206,10 +223,16 @@ class XingbaSpaForumCrawler(BaseCrawler):
                     f"(api_count={result.get('count')})"
                 )
 
+            self._last_completed_page = page
+
             if page < end_page:
                 time.sleep(page_delay)
 
-        self.logger.info(f"[SPA {forum_name}] fetched {fetched_total} posts total")
+        self.logger.info(
+            f"[SPA {forum_name}] fetched {fetched_total} posts total "
+            f"(last_page={self._last_completed_page}, exhausted={self._exhausted}, "
+            f"budget_stop={self._stopped_by_budget})"
+        )
         return records
 
     def on_start(self):

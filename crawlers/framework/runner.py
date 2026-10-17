@@ -98,6 +98,9 @@ def run_crawler(
                 "task_id": task_id,
                 "items": new_count,
                 "total_fetched": getattr(instance, "_incremental_fetched", None) or len(records),
+                "last_page": getattr(instance, "_last_completed_page", None),
+                "exhausted": bool(getattr(instance, "_exhausted", False)),
+                "stopped_by_budget": bool(getattr(instance, "_stopped_by_budget", False)),
             }
         except Exception as e:
             last_error = e

@@ -1,21 +1,24 @@
-name: Xingba SPA Auto Backfill
+name: Xingba SPA Auto Backfill (DISABLED)
 
-# 自动回填：按 DB 游标推进，每次 6 页，每 2 小时，直到 1000 页
+# 已由 Xingba SPA Continuous Backfill 接管（range=all、长时间接力）。
+# 需要小批量手动推进时，输入 ENABLE 再跑。
 on:
-  schedule:
-    - cron: "30 */2 * * *"
   workflow_dispatch:
     inputs:
+      confirm:
+        description: "Type ENABLE to run legacy small-batch auto backfill"
+        required: true
+        type: string
       pages:
         description: "Pages this run (default 6)"
         required: false
         type: string
         default: "6"
       max_page:
-        description: "Stop after this page (default 1000)"
+        description: "Stop after this page (default 30000)"
         required: false
         type: string
-        default: "1000"
+        default: "30000"
       dry_run:
         description: "Print plan only"
         required: false
@@ -28,12 +31,13 @@ env:
   XINGBA_SPA_USER: ${{ secrets.XINGBA_SPA_USER }}
   XINGBA_SPA_PASS: ${{ secrets.XINGBA_SPA_PASS }}
   XINGBA_SPA_AUTO_BACKFILL_PAGES: ${{ github.event.inputs.pages || '6' }}
-  XINGBA_SPA_AUTO_BACKFILL_MAX: ${{ github.event.inputs.max_page || '1000' }}
+  XINGBA_SPA_AUTO_BACKFILL_MAX: ${{ github.event.inputs.max_page || '30000' }}
   PYTHONUNBUFFERED: "1"
 
 jobs:
   auto-backfill:
     name: Xingba SPA auto backfill (cursor)
+    if: ${{ github.event.inputs.confirm == 'ENABLE' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:

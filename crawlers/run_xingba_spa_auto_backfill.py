@@ -15,7 +15,7 @@ from framework import db
 SLUG = "xingba-spa-798"
 CURSOR_KEY = "spa_backfill_next_page"
 DEFAULT_PAGES = 6
-DEFAULT_MAX_PAGE = 1000
+DEFAULT_MAX_PAGE = 30000
 START_PAGE = 1
 
 
@@ -69,6 +69,7 @@ def main():
             "start_page": next_page,
             "end_page": end_page,
             "page_count": end_page - next_page + 1,
+            "range_days": "all",
         },
     )
     print(f"Result: {result}")

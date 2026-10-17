@@ -203,7 +203,7 @@ class XingbaSpaClient:
     def _guest_token_from_ssr(self) -> str:
         url = (
             f"{self.site_base}/mainPage/"
-            "666a736faa91b688401ae8da/132/798?filter=publish&range=180"
+            "666a736faa91b688401ae8da/132/798?filter=publish&range=all"
         )
         try:
             resp = self.session.get(
