@@ -235,13 +235,26 @@ class XingbaSpaClient:
                 last_err = e
         raise RuntimeError(f"Search/Social/Query failed: {last_err}")
 
-    def trend_read(self, for_id: str, *, post_type: int = 1) -> dict[str, Any]:
+    def _new_session(self) -> requests.Session:
+        """线程内独立 Session（共享同一套鉴权头）。"""
+        s = requests.Session()
+        s.headers.update(dict(self.session.headers))
+        return s
+
+    def trend_read(
+        self,
+        for_id: str,
+        *,
+        post_type: int = 1,
+        session: requests.Session | None = None,
+    ) -> dict[str, Any]:
         """详情：含 attachments[].resource.name（真实 CDN 文件名）。"""
+        sess = session or self.session
         body = {"for_id": str(for_id), "type": int(post_type)}
         last_err: Exception | None = None
         for social in self.socials:
             try:
-                resp = self.session.post(
+                resp = sess.post(
                     f"{social}/Social/Trend/Read",
                     json=body,
                     timeout=self.timeout,
@@ -297,8 +310,14 @@ class XingbaSpaClient:
             return ""
         return f"{self.z_s3.rstrip('/')}/{name}"
 
-    def fetch_torrent_bytes(self, torrent_url: str) -> bytes:
-        resp = self.session.get(torrent_url, timeout=self.timeout)
+    def fetch_torrent_bytes(
+        self,
+        torrent_url: str,
+        *,
+        session: requests.Session | None = None,
+    ) -> bytes:
+        sess = session or self.session
+        resp = sess.get(torrent_url, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.content
         if not data.startswith(b"d") or b"4:info" not in data:
@@ -320,9 +339,19 @@ class XingbaSpaClient:
         # 迅雷只需 infohash；不拼 announce-list（往往几十个 &tr=，又长又无用）
         return f"magnet:?xt=urn:btih:{infohash}"
 
-    def resolve_attachment_urls(self, for_id: str) -> list[dict[str, Any]]:
-        """详情附件 → torrent_url + magnet（优先用 magnet 给下载器）。"""
-        detail = self.trend_read(for_id)
+    def resolve_attachment_urls(
+        self,
+        for_id: str,
+        *,
+        register_download: bool = False,
+        session: requests.Session | None = None,
+    ) -> list[dict[str, Any]]:
+        """详情附件 → torrent_url + magnet（优先用 magnet 给下载器）。
+
+        register_download=False：跳过站点登记接口（CDN 可直接拉种子，省一次 RTT）。
+        """
+        sess = session or self.session
+        detail = self.trend_read(for_id, session=sess)
         out: list[dict[str, Any]] = []
         for att in detail.get("attachments") or []:
             if not isinstance(att, dict):
@@ -333,14 +362,14 @@ class XingbaSpaClient:
             file_hash = str(file_obj.get("hash") or "")
             torrent_url = self.torrent_cdn_url(resource_name)
             magnet = ""
-            # 站点流程：先 Download 再拉 CDN；失败不阻断 URL 解析
-            if file_hash and torrent_url:
+            if torrent_url:
+                if register_download and file_hash:
+                    try:
+                        self.trend_download(for_id=for_id, file_hash=file_hash)
+                    except Exception:
+                        pass
                 try:
-                    self.trend_download(for_id=for_id, file_hash=file_hash)
-                except Exception:
-                    pass
-                try:
-                    raw = self.fetch_torrent_bytes(torrent_url)
+                    raw = self.fetch_torrent_bytes(torrent_url, session=sess)
                     magnet = self.torrent_to_magnet(raw)
                 except Exception:
                     magnet = ""
@@ -355,6 +384,37 @@ class XingbaSpaClient:
                     "magnet": magnet,
                 }
             )
+        return out
+
+    def resolve_attachments_many(
+        self,
+        post_ids: list[str],
+        *,
+        workers: int = 8,
+    ) -> dict[str, list[dict[str, Any]] | Exception]:
+        """并行解析多帖附件；返回 post_id → attachments 或 Exception。"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        ids = [str(p).strip() for p in post_ids if str(p).strip()]
+        if not ids:
+            return {}
+        workers = max(1, min(int(workers or 1), 16, len(ids)))
+
+        def _one(pid: str) -> tuple[str, list[dict[str, Any]] | Exception]:
+            sess = self._new_session()
+            try:
+                return pid, self.resolve_attachment_urls(pid, session=sess)
+            except Exception as e:
+                return pid, e
+            finally:
+                sess.close()
+
+        out: dict[str, list[dict[str, Any]] | Exception] = {}
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [pool.submit(_one, pid) for pid in ids]
+            for fut in as_completed(futs):
+                pid, res = fut.result()
+                out[pid] = res
         return out
 
     def _guest_token_from_ssr(self) -> str:

@@ -46,7 +46,8 @@ class XingbaSpaForumCrawler(BaseCrawler):
             "page_size": 16,
             "start_page": 1,
             "end_page": 6,
-            "page_delay": 1.0,
+            "page_delay": 0.3,
+            "resolve_workers": 8,
             "sort_field": "create_time",
             "time_budget_sec": 0,
         },
@@ -76,7 +77,8 @@ class XingbaSpaForumCrawler(BaseCrawler):
             raise RuntimeError(f"end_page({end_page}) < start_page({start_page})")
 
         page_size = int(cfg.get("page_size") or 16)
-        page_delay = float(cfg.get("page_delay") or 1.0)
+        page_delay = float(cfg.get("page_delay") or 0.3)
+        resolve_workers = int(cfg.get("resolve_workers") or 8)
         range_days = cfg.get("range_days")
         range_days_i = int(range_days) if range_days not in (None, "", "all") else None
         time_budget_sec = float(cfg.get("time_budget_sec") or 0)
@@ -158,27 +160,43 @@ class XingbaSpaForumCrawler(BaseCrawler):
                 break
 
             page_rows: list[dict] = []
+            pending: list[dict] = []
+            need_resolve: list[str] = []
             for item in items:
-                self.wait_if_paused()
-                if self.should_stop:
-                    break
                 post_id = str(item.get("id") or "").strip()
                 if not post_id or post_id in seen:
                     continue
                 seen.add(post_id)
+                list_atts = item.get("attachments") or []
+                pending.append(item)
+                if list_atts:
+                    need_resolve.append(post_id)
 
+            # 列表无 resource.name；整页并行拉详情+种子→magnet（避免串行拖垮 CI）
+            resolved_map: dict[str, list] = {}
+            if need_resolve:
+                batch = client.resolve_attachments_many(
+                    need_resolve, workers=resolve_workers
+                )
+                for pid, res in batch.items():
+                    if isinstance(res, Exception):
+                        self.logger.warning(
+                            f"resolve attachments failed post={pid}: {res}"
+                        )
+                    else:
+                        resolved_map[pid] = res
+
+            for item in pending:
+                self.wait_if_paused()
+                if self.should_stop:
+                    break
+                post_id = str(item.get("id") or "").strip()
                 text_blob = self._join_text(item)
                 list_atts = item.get("attachments") or []
-                # 列表里没有 resource.name；详情 Trend/Read 才有真实 CDN 种子地址
-                if list_atts:
-                    try:
-                        attachments = client.resolve_attachment_urls(post_id)
-                        time.sleep(0.2)
-                    except Exception as e:
-                        self.logger.warning(
-                            f"resolve attachments failed post={post_id}: {e}"
-                        )
-                        attachments = self._normalize_attachments(list_atts)
+                if post_id in resolved_map:
+                    attachments = resolved_map[post_id]
+                elif list_atts:
+                    attachments = self._normalize_attachments(list_atts)
                 else:
                     attachments = []
 
@@ -215,18 +233,9 @@ class XingbaSpaForumCrawler(BaseCrawler):
                     "tags": [str(t) for t in tags],
                     "published_at": published_at,
                     "create_time": item.get("create_time"),
-                    "status": item.get("status"),
-                    "user_id": str(item.get("user_id") or ""),
-                    "attachments": attachments,
                     "download_links": download_links,
-                    "text_preview": text_blob[:2000],
                     "url": url,
                     "source_page": page,
-                    "raw": {
-                        "type": item.get("type"),
-                        "classify_id": item.get("classify_id"),
-                        "trend": item.get("trend"),
-                    },
                 }
                 page_rows.append(row)
 
@@ -277,6 +286,7 @@ class XingbaSpaForumCrawler(BaseCrawler):
         )
         rng = os.environ.get("XINGBA_SPA_RANGE_DAYS")
         size = os.environ.get("XINGBA_SPA_PAGE_SIZE")
+        workers = os.environ.get("XINGBA_SPA_RESOLVE_WORKERS")
         if start:
             cfg["start_page"] = int(start)
         if end:
@@ -287,6 +297,8 @@ class XingbaSpaForumCrawler(BaseCrawler):
             cfg["range_days"] = int(rng) if rng != "all" else None
         if size:
             cfg["page_size"] = int(size)
+        if workers:
+            cfg["resolve_workers"] = int(workers)
 
     @staticmethod
     def _join_text(item: dict) -> str:
@@ -377,8 +389,6 @@ class XingbaSpaForumCrawler(BaseCrawler):
             "published_at": published or "",
             "create_time": row.get("create_time"),
             "download_links": row.get("download_links") or [],
-            "attachments": row.get("attachments") or [],
-            "text_preview": row.get("text_preview") or "",
             "source_page": row.get("source_page"),
         }
 
