@@ -168,10 +168,32 @@ class XingbaSpaForumCrawler(BaseCrawler):
                 seen.add(post_id)
 
                 text_blob = self._join_text(item)
-                attachments = self._normalize_attachments(item.get("attachments") or [])
+                list_atts = item.get("attachments") or []
+                # 列表里没有 resource.name；详情 Trend/Read 才有真实 CDN 种子地址
+                if list_atts:
+                    try:
+                        attachments = client.resolve_attachment_urls(post_id)
+                        time.sleep(0.2)
+                    except Exception as e:
+                        self.logger.warning(
+                            f"resolve attachments failed post={post_id}: {e}"
+                        )
+                        attachments = self._normalize_attachments(list_atts)
+                else:
+                    attachments = []
+
                 download_links = self._extract_links(text_blob)
                 for att in attachments:
-                    # 附件种子用稳定伪链接保存，便于后续补下载
+                    # 迅雷对 photos.x5ewt.com 直链常解析失败；优先存 magnet
+                    magnet = (att.get("magnet") or "").strip()
+                    if magnet:
+                        download_links.append(magnet)
+                        continue
+                    torrent_url = (att.get("torrent_url") or "").strip()
+                    if torrent_url:
+                        download_links.append(torrent_url)
+                        continue
+                    # 回退：详情失败时仍保留伪链接，便于日后补解析
                     h = att.get("hash") or ""
                     name = att.get("name") or ""
                     if h:
