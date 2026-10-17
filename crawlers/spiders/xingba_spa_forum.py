@@ -6,7 +6,7 @@ https://www.bin7sha1n.website/mainPage/666a736faa91b688401ae8da/132/798?filter=p
 - 排序：新主题（create_time DESC）
 - 时间范围：默认半年（range=180）
 - 分页：Search/Social/Query 的 page/limit（非 Discuz HTML 翻页）
-- 存储：专用表 spider_xingba_spa_posts（不写旧 spider_data_records）
+- 存储：与旧爬虫相同，写入 spider_data_records
 """
 
 from __future__ import annotations
@@ -16,9 +16,9 @@ import re
 import time
 from datetime import datetime, timezone
 from typing import Any
+
 from framework import BaseCrawler, CrawlerRegistry
 from framework.base import CrawlerMeta
-from framework import db as framework_db
 from spiders.xingba_spa_client import XingbaSpaClient
 
 
@@ -105,19 +105,10 @@ class XingbaSpaForumCrawler(BaseCrawler):
         self.logger.info(f"SPA bootstrap login as {user_name}")
         client.bootstrap()
 
-        # ensure dedicated table exists (idempotent)
-        framework_db.ensure_xingba_spa_posts_table()
-
-        crawler_id = int(getattr(self, "_crawler_id", 0) or 0)
-        if not crawler_id:
-            crawler_row = framework_db.get_crawler_by_slug(self.meta.slug) or {}
-            crawler_id = int(crawler_row.get("id") or 0)
-
         persist = getattr(self, "persist_batch", None)
         seen: set[str] = set()
         fetched_total = 0
         self._incremental_fetched = 0
-        # runner 仍会调 save_records_dedup；本爬虫改为专用表，返回空 list 避免双写
         records: list[dict] = []
 
         list_base = (
@@ -200,29 +191,20 @@ class XingbaSpaForumCrawler(BaseCrawler):
             fetched_total += len(page_rows)
             self._incremental_fetched = fetched_total
 
-            if crawler_id and page_rows:
-                saved = framework_db.save_xingba_spa_posts(
-                    crawler_id=crawler_id,
-                    task_id=getattr(self, "_task_id", None),
-                    rows=page_rows,
-                )
-                self._incremental_saved = int(
-                    getattr(self, "_incremental_saved", 0)
-                ) + int(saved)
+            if page_rows:
+                batch = [
+                    {"data": self._record_payload(r), "url": r.get("url")}
+                    for r in page_rows
+                ]
+                if persist:
+                    saved = persist(batch)
+                else:
+                    records.extend(batch)
+                    saved = len(batch)
                 self.logger.info(
                     f"Page {page}: {len(page_rows)} fetched, {saved} new saved "
                     f"(api_count={result.get('count')})"
                 )
-            elif persist and page_rows:
-                # fallback: still allow generic persist if somehow wired
-                batch = [{"data": r, "url": r.get("url")} for r in page_rows]
-                saved = persist(batch)
-                self.logger.info(
-                    f"Page {page}: {len(page_rows)} fetched, {saved} saved via persist"
-                )
-            else:
-                records.extend({"data": r, "url": r.get("url")} for r in page_rows)
-                self.logger.info(f"Page {page}: {len(page_rows)} fetched")
 
             if page < end_page:
                 time.sleep(page_delay)
@@ -323,6 +305,29 @@ class XingbaSpaForumCrawler(BaseCrawler):
             return datetime.fromtimestamp(n, tz=timezone.utc).replace(tzinfo=None)
         except Exception:
             return None
+
+    @staticmethod
+    def _record_payload(row: dict) -> dict:
+        """JSON-safe payload for spider_data_records (UI)."""
+        published = row.get("published_at")
+        if isinstance(published, datetime):
+            published = published.strftime("%Y-%m-%d %H:%M:%S")
+        return {
+            "thread_id": row.get("post_id"),
+            "post_id": row.get("post_id"),
+            "eid": row.get("eid"),
+            "forum_id": row.get("category_id"),
+            "forum_name": row.get("forum_name"),
+            "title": row.get("title"),
+            "tags": row.get("tags") or [],
+            "category": ",".join(row.get("tags") or []),
+            "published_at": published or "",
+            "create_time": row.get("create_time"),
+            "download_links": row.get("download_links") or [],
+            "attachments": row.get("attachments") or [],
+            "text_preview": row.get("text_preview") or "",
+            "source_page": row.get("source_page"),
+        }
 
 
 CrawlerRegistry.register(XingbaSpaForumCrawler)

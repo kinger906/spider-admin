@@ -79,35 +79,6 @@ CREATE TABLE IF NOT EXISTS spider_system_logs (
 
 CREATE INDEX IF NOT EXISTS idx_spider_data_records_crawler_url ON spider_data_records(crawler_id, url);
 
-CREATE TABLE IF NOT EXISTS spider_xingba_spa_posts (
-  id SERIAL PRIMARY KEY,
-  crawler_id INTEGER REFERENCES spider_crawlers(id) ON DELETE SET NULL,
-  task_id INTEGER REFERENCES spider_tasks(id) ON DELETE SET NULL,
-  post_id VARCHAR(64) NOT NULL,
-  eid BIGINT,
-  category_id VARCHAR(64) NOT NULL DEFAULT '798',
-  forum_name VARCHAR(128),
-  title TEXT NOT NULL DEFAULT '',
-  tags JSONB NOT NULL DEFAULT '[]'::jsonb,
-  published_at TIMESTAMP,
-  create_time BIGINT,
-  status INTEGER,
-  user_id VARCHAR(64),
-  attachments JSONB NOT NULL DEFAULT '[]'::jsonb,
-  download_links JSONB NOT NULL DEFAULT '[]'::jsonb,
-  text_preview TEXT,
-  url TEXT,
-  source_page INTEGER,
-  raw JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  UNIQUE (category_id, post_id)
-);
-CREATE INDEX IF NOT EXISTS idx_xingba_spa_posts_published
-  ON spider_xingba_spa_posts (published_at DESC NULLS LAST);
-CREATE INDEX IF NOT EXISTS idx_xingba_spa_posts_create_time
-  ON spider_xingba_spa_posts (create_time DESC NULLS LAST);
-
 CREATE TABLE IF NOT EXISTS spider_users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(64) NOT NULL UNIQUE,

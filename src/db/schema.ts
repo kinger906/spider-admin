@@ -8,7 +8,6 @@ import {
   serial,
   varchar,
   pgEnum,
-  bigint,
 } from "drizzle-orm/pg-core";
 
 export const crawlerStatusEnum = pgEnum("spider_crawler_status", [
@@ -68,36 +67,6 @@ export const dataRecords = pgTable("spider_data_records", {
   data: jsonb("data").$type<Record<string, unknown>>().notNull(),
   url: text("url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-/** 杏吧新版 SPA 列表帖（mainPage 内部分页 API） */
-export const xingbaSpaPosts = pgTable("spider_xingba_spa_posts", {
-  id: serial("id").primaryKey(),
-  crawlerId: integer("crawler_id").references(() => crawlers.id, {
-    onDelete: "set null",
-  }),
-  taskId: integer("task_id").references(() => tasks.id, { onDelete: "set null" }),
-  postId: varchar("post_id", { length: 64 }).notNull(),
-  eid: bigint("eid", { mode: "number" }),
-  categoryId: varchar("category_id", { length: 64 }).notNull().default("798"),
-  forumName: varchar("forum_name", { length: 128 }),
-  title: text("title").notNull().default(""),
-  tags: jsonb("tags").$type<string[]>().notNull().default([]),
-  publishedAt: timestamp("published_at"),
-  createTime: bigint("create_time", { mode: "number" }),
-  status: integer("status"),
-  userId: varchar("user_id", { length: 64 }),
-  attachments: jsonb("attachments")
-    .$type<Record<string, unknown>[]>()
-    .notNull()
-    .default([]),
-  downloadLinks: jsonb("download_links").$type<string[]>().notNull().default([]),
-  textPreview: text("text_preview"),
-  url: text("url"),
-  sourcePage: integer("source_page"),
-  raw: jsonb("raw").$type<Record<string, unknown>>().notNull().default({}),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const mediaFiles = pgTable("spider_media_files", {
