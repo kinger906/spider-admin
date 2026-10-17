@@ -1,13 +1,13 @@
 name: Xingba SPA Incremental
 
-# 日常增量：SPA 华人下载区，新主题+半年，最新 6 页，每 4 小时
+# 日常增量：SPA 华人下载区，新主题+全部时间，最新 6 页，每 4 小时（对齐旧 Discuz 增量）
 on:
   schedule:
     - cron: "0 */4 * * *"
   workflow_dispatch:
     inputs:
       pages:
-        description: "Latest pages (default 6)"
+        description: "Latest pages (default 6, same as legacy)"
         required: false
         type: string
         default: "6"

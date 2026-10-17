@@ -30,7 +30,7 @@ class XingbaSpaForumCrawler(BaseCrawler):
             "新版 SPA 按新主题+全部时间爬取华人下载区(categories_id=798)，"
             "内部分页走 Search/Social/Query"
         ),
-        schedule="0 */6 * * *",
+        schedule="0 */4 * * *",
         config={
             "retry_limit": 2,
             "site_base": "https://www.bin7sha1n.website",

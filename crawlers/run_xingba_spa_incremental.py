@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""杏吧 SPA 日常增量：新主题+半年范围，最新 N 页（默认 6）。"""
+"""杏吧 SPA 日常增量：新主题+全部时间，最新 N 页（默认 6，同旧 Discuz 增量）。"""
 
 from __future__ import annotations
 
@@ -29,11 +29,16 @@ def main():
         print(f"Missing crawler: {SLUG}")
         sys.exit(1)
 
-    print(f"\n=== {crawler_cls.meta.name} ({SLUG}) pages 1-{pages} ===")
+    print(f"\n=== {crawler_cls.meta.name} ({SLUG}) pages 1-{pages} (range=all) ===")
     result = run_crawler(
         crawler_cls,
         triggered_by=args.trigger,
-        config_overrides={"start_page": 1, "end_page": pages},
+        config_overrides={
+            "start_page": 1,
+            "end_page": pages,
+            "range_days": "all",
+            "time_budget_sec": 0,
+        },
     )
     print(f"Result: {result}")
     if result.get("status") != "success":
