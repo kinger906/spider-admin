@@ -162,11 +162,16 @@ class XingbaSpaForumCrawler(BaseCrawler):
             page_rows: list[dict] = []
             pending: list[dict] = []
             need_resolve: list[str] = []
+            skipped_ads = 0
             for item in items:
                 post_id = str(item.get("id") or "").strip()
                 if not post_id or post_id in seen:
                     continue
                 seen.add(post_id)
+                # po.* = 推荐/广告贴（resource 常为 master.torrent 占位），跳过
+                if self._is_ad_or_promo_post(item):
+                    skipped_ads += 1
+                    continue
                 list_atts = item.get("attachments") or []
                 pending.append(item)
                 if list_atts:
@@ -208,13 +213,16 @@ class XingbaSpaForumCrawler(BaseCrawler):
                         download_links.append(magnet)
                         continue
                     torrent_url = (att.get("torrent_url") or "").strip()
-                    if torrent_url:
+                    # master.torrent 是 storage_type=1 的占位名，不是可下种子
+                    if torrent_url and not torrent_url.rstrip("/").endswith(
+                        "/master.torrent"
+                    ):
                         download_links.append(torrent_url)
                         continue
                     # 回退：详情失败时仍保留伪链接，便于日后补解析
                     h = att.get("hash") or ""
                     name = att.get("name") or ""
-                    if h:
+                    if h and name != "master.torrent":
                         download_links.append(f"xingba-att://{h}/{name}".rstrip("/"))
 
                 published_at = self._ts_to_beijing_str(item.get("create_time"))
@@ -254,7 +262,7 @@ class XingbaSpaForumCrawler(BaseCrawler):
                     saved = len(batch)
                 self.logger.info(
                     f"Page {page}: {len(page_rows)} fetched, {saved} new saved "
-                    f"(api_count={result.get('count')})"
+                    f"(skipped_ads={skipped_ads}, api_count={result.get('count')})"
                 )
 
             self._last_completed_page = page
@@ -299,6 +307,19 @@ class XingbaSpaForumCrawler(BaseCrawler):
             cfg["page_size"] = int(size)
         if workers:
             cfg["resolve_workers"] = int(workers)
+
+    @staticmethod
+    def _is_ad_or_promo_post(item: dict) -> bool:
+        """推荐引擎/广告贴：id 为 po.*，或 type=4。"""
+        post_id = str(item.get("id") or "").strip().lower()
+        if post_id.startswith("po."):
+            return True
+        try:
+            if int(item.get("type") or 0) == 4:
+                return True
+        except (TypeError, ValueError):
+            pass
+        return False
 
     @staticmethod
     def _join_text(item: dict) -> str:

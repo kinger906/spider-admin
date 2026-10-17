@@ -304,9 +304,12 @@ class XingbaSpaClient:
         raise RuntimeError(f"Social/Trend/Download failed: {last_err}")
 
     def torrent_cdn_url(self, resource_name: str) -> str:
-        """resource.name → CDN 上的 .torrent 直链（迅雷常拉不动该域名）。"""
+        """resource.name → CDN 上的 .torrent 直链（迅雷常拉不动该域名）。
+
+        storage_type=1 广告/推荐贴会给占位名 master.torrent，不是真实种子。
+        """
         name = (resource_name or "").lstrip("/")
-        if not name:
+        if not name or name == "master.torrent":
             return ""
         return f"{self.z_s3.rstrip('/')}/{name}"
 
