@@ -52,17 +52,13 @@ export async function getDataRecords(crawlerId?: number, search?: string, page =
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const offset = (page - 1) * pageSize;
 
-  // 按发布时间倒序：优先 data.create_time（unix），否则 published_at，再退回入库时间
+  // 按 data.published_at（北京时间字符串 YYYY-MM-DD HH:MM:SS）倒序
   const [rows, total] = await Promise.all([
     db
       .select()
       .from(dataRecords)
       .where(where)
-      .orderBy(
-        sql`COALESCE(NULLIF(${dataRecords.data}->>'create_time', '')::bigint, 0) DESC`,
-        sql`COALESCE(${dataRecords.data}->>'published_at', '') DESC`,
-        desc(dataRecords.createdAt)
-      )
+      .orderBy(sql`COALESCE(${dataRecords.data}->>'published_at', '') DESC`)
       .limit(pageSize)
       .offset(offset),
     db.select({ count: count() }).from(dataRecords).where(where),
