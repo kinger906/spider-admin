@@ -272,6 +272,8 @@ class XingbaSpaForumCrawler(BaseCrawler):
                     name = att.get("name") or ""
                     if h and name != "master.torrent":
                         download_links.append(f"xingba-att://{h}/{name}".rstrip("/"))
+                # 正文提取与附件 magnet 常重复，入库前去重并保序
+                download_links = list(dict.fromkeys(download_links))
 
                 published_at = self._ts_to_beijing_str(item.get("create_time"))
                 title = (item.get("title") or "").strip()
