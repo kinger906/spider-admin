@@ -10,10 +10,31 @@ import requests
 
 BUNDLE_INFO = "1, com.xingba.web.online"
 DEFAULT_SITE = "https://www.bin7sha1n.website"
-DEFAULT_AUTH_LINE = "https://auth-server.zsxer.top"
-FALLBACK_CENTER = "https://center-server.zsxer.top"
-FALLBACK_SEARCH = "https://search-server.zsxer.top"
-FALLBACK_SOCIAL = "https://social-server.zsxer.top"
+# zsxer 在部分 CI 出口 DNS 会失败，仅作末位兜底，不优先
+AUTH_LINES = (
+    "https://auth-server.hhg3e.com",
+    "https://auth-server.hah6w.com",
+    "https://auth-server.xcfk3.com",
+    "https://auth-server.zsxer.top",
+)
+FALLBACK_CENTERS = (
+    "https://center-server.hhg3e.com",
+    "https://center-server.hah6w.com",
+    "https://center-server.xcfk3.com",
+    "https://center-server.zsxer.top",
+)
+FALLBACK_SEARCHES = (
+    "https://search-server.hhg3e.com",
+    "https://search-server.hah6w.com",
+    "https://search-server.xcfk3.com",
+    "https://search-server.zsxer.top",
+)
+FALLBACK_SOCIALS = (
+    "https://social-server.hhg3e.com",
+    "https://social-server.hah6w.com",
+    "https://social-server.xcfk3.com",
+    "https://social-server.zsxer.top",
+)
 FALLBACK_Z_S3 = "https://photos.x5ewt.com"
 
 JWT_RE = re.compile(r"eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+")
@@ -70,14 +91,23 @@ def _as_list(value: Any) -> list[str]:
 
 
 def _prefer_hosts(hosts: list[str], *fallbacks: str) -> list[str]:
+    """优先 API 返回线路；zsxer 放到最后（CI 上常 DNS 失败）。"""
     ordered: list[str] = []
     seen: set[str] = set()
-    for h in list(fallbacks) + [x for x in hosts if "zsxer" in x] + hosts:
-        h = h.rstrip("/")
+
+    def add(h: str) -> None:
+        h = (h or "").rstrip("/")
         if not h or h in seen:
-            continue
+            return
         seen.add(h)
         ordered.append(h)
+
+    primary = [x for x in hosts if x and "zsxer" not in x]
+    zsxer = [x for x in hosts if x and "zsxer" in x]
+    fb_primary = [x for x in fallbacks if x and "zsxer" not in x]
+    fb_zsxer = [x for x in fallbacks if x and "zsxer" in x]
+    for h in primary + fb_primary + zsxer + fb_zsxer:
+        add(h)
     return ordered
 
 
@@ -108,9 +138,9 @@ class XingbaSpaClient:
                 "x-bundle-info": BUNDLE_INFO,
             }
         )
-        self.centers: list[str] = [FALLBACK_CENTER]
-        self.searches: list[str] = [FALLBACK_SEARCH]
-        self.socials: list[str] = [FALLBACK_SOCIAL]
+        self.centers: list[str] = list(FALLBACK_CENTERS)
+        self.searches: list[str] = list(FALLBACK_SEARCHES)
+        self.socials: list[str] = list(FALLBACK_SOCIALS)
         self.z_s3: str = FALLBACK_Z_S3
         self.token: str = ""
 
@@ -125,25 +155,27 @@ class XingbaSpaClient:
 
     def refresh_lines(self) -> None:
         last_err: Exception | None = None
-        for auth in (DEFAULT_AUTH_LINE, "https://auth-server.hhg3e.com"):
+        # DNS/连接失败要快失败，好切下一条线路
+        probe_timeout = min(12.0, float(self.timeout))
+        for auth in AUTH_LINES:
             try:
                 resp = self.session.get(
                     f"{auth}/Auth/Guest/Token",
                     params={"package_id": 1},
-                    timeout=self.timeout,
+                    timeout=probe_timeout,
                 )
                 resp.raise_for_status()
                 data = resp.json()
                 if not isinstance(data, dict):
                     continue
                 self.centers = _prefer_hosts(
-                    _as_list(data.get("center-server")), FALLBACK_CENTER
+                    _as_list(data.get("center-server")), *FALLBACK_CENTERS
                 )
                 self.searches = _prefer_hosts(
-                    _as_list(data.get("search-server")), FALLBACK_SEARCH
+                    _as_list(data.get("search-server")), *FALLBACK_SEARCHES
                 )
                 self.socials = _prefer_hosts(
-                    _as_list(data.get("social-server")), FALLBACK_SOCIAL
+                    _as_list(data.get("social-server")), *FALLBACK_SOCIALS
                 )
                 z_hosts = _prefer_hosts(_as_list(data.get("z-s3")), FALLBACK_Z_S3)
                 if z_hosts:
@@ -151,8 +183,11 @@ class XingbaSpaClient:
                 return
             except Exception as e:
                 last_err = e
+        # auth 全挂时仍保留多条非 zsxer 兜底，避免只剩一个死域名
+        self.centers = list(FALLBACK_CENTERS)
+        self.searches = list(FALLBACK_SEARCHES)
+        self.socials = list(FALLBACK_SOCIALS)
         if last_err:
-            # keep fallbacks
             pass
 
     def login(self, user_name: str, password: str) -> str:
@@ -162,12 +197,13 @@ class XingbaSpaClient:
             "package_id": 1,
         }
         last_err: Exception | None = None
+        probe_timeout = min(12.0, float(self.timeout))
         for center in self.centers:
             try:
                 resp = self.session.post(
                     f"{center}/User/Account/Login",
                     json=body,
-                    timeout=self.timeout,
+                    timeout=probe_timeout,
                 )
                 token = resp.headers.get("Token") or resp.headers.get("token") or ""
                 if not token and resp.ok:
@@ -182,9 +218,12 @@ class XingbaSpaClient:
                     # promote working center
                     self.centers = [center] + [c for c in self.centers if c != center]
                     return token
-                last_err = RuntimeError(f"{center} login -> {resp.status_code} {resp.text[:200]}")
+                last_err = RuntimeError(
+                    f"{center} login -> {resp.status_code} {resp.text[:200]}"
+                )
             except Exception as e:
                 last_err = e
+                continue
         raise RuntimeError(f"SPA login failed: {last_err}")
 
     def query_posts(
