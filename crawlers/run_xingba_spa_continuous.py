@@ -110,6 +110,17 @@ def main() -> None:
         print(f"Missing crawler: {slug}")
         sys.exit(1)
 
+    # 首次跑某 slug 时 DB 尚无行；先注册再改游标
+    meta = crawler_cls.meta
+    db.register_crawler(
+        name=meta.name,
+        slug=meta.slug,
+        description=meta.description,
+        file_path=crawler_file_path(meta.slug),
+        schedule=meta.schedule,
+        config=meta.config,
+    )
+
     page_size = int(
         (crawler_cls.meta.config or {}).get("page_size") or DEFAULT_PAGE_SIZE
     )
