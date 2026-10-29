@@ -1,0 +1,76 @@
+name: Xingba SPA 280 Continuous Backfill
+
+# 华人精品原创下载(categories_id=280)，range=all，DB 游标连续回填。
+# 约 6k 页；GitHub job 约 6 小时上限，每 6 小时接力（预算 330 分钟）。
+# https://www.bin7sha1n.website/mainPage/666a736faa91b688401ae8da/412/280?filter=publish&range=all
+on:
+  schedule:
+    - cron: "20 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      reset_cursor:
+        description: "Reset cursor to page 1"
+        required: false
+        type: boolean
+        default: false
+      max_page:
+        description: "Stop after this page (default 10000)"
+        required: false
+        type: string
+        default: "10000"
+      chunk_pages:
+        description: "Pages per inner crawl round (default 40)"
+        required: false
+        type: string
+        default: "40"
+      budget_minutes:
+        description: "Time budget minutes this run (default 330)"
+        required: false
+        type: string
+        default: "330"
+      dry_run:
+        description: "Print plan only"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  API_SECRET: ${{ secrets.API_SECRET }}
+  XINGBA_SPA_USER: ${{ secrets.XINGBA_SPA_USER }}
+  XINGBA_SPA_PASS: ${{ secrets.XINGBA_SPA_PASS }}
+  XINGBA_SPA_SLUG: xingba-spa-280
+  XINGBA_SPA_CONTINUOUS_MAX: ${{ github.event.inputs.max_page || '10000' }}
+  XINGBA_SPA_CONTINUOUS_CHUNK: ${{ github.event.inputs.chunk_pages || '40' }}
+  XINGBA_SPA_CONTINUOUS_BUDGET_MIN: ${{ github.event.inputs.budget_minutes || '330' }}
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  continuous:
+    name: Xingba SPA 280 continuous (range=all)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: crawlers/requirements.txt
+
+      - name: Install dependencies
+        working-directory: crawlers
+        run: pip install -r requirements.txt
+
+      - name: Continuous crawl 280
+        working-directory: crawlers
+        run: |
+          ARGS=(--slug xingba-spa-280 --trigger ci)
+          if [ "${{ github.event.inputs.reset_cursor }}" = "true" ]; then
+            ARGS+=(--reset-cursor)
+          fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          python run_xingba_spa_continuous.py "${ARGS[@]}"

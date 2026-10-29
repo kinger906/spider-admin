@@ -17,6 +17,7 @@ env:
   API_SECRET: ${{ secrets.API_SECRET }}
   XINGBA_SPA_USER: ${{ secrets.XINGBA_SPA_USER }}
   XINGBA_SPA_PASS: ${{ secrets.XINGBA_SPA_PASS }}
+  XINGBA_SPA_SLUG: xingba-spa-798
   XINGBA_SPA_INCREMENTAL_PAGES: ${{ github.event.inputs.pages || '6' }}
   PYTHONUNBUFFERED: "1"
 
@@ -40,4 +41,4 @@ jobs:
 
       - name: Crawl SPA forum
         working-directory: crawlers
-        run: python run_xingba_spa_incremental.py --trigger ci
+        run: python run_xingba_spa_incremental.py --slug xingba-spa-798 --trigger ci

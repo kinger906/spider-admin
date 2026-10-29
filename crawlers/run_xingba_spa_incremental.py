@@ -11,25 +11,31 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from framework import CrawlerRegistry, run_crawler
 
-SLUG = "xingba-spa-798"
+DEFAULT_SLUG = "xingba-spa-798"
 DEFAULT_PAGES = 6
 
 
 def main():
     parser = argparse.ArgumentParser(description="Xingba SPA incremental crawl")
+    parser.add_argument(
+        "--slug",
+        default=DEFAULT_SLUG,
+        help="Crawler slug (default xingba-spa-798)",
+    )
     parser.add_argument("--pages", type=int, default=DEFAULT_PAGES, help="Latest pages")
     parser.add_argument("--trigger", default="ci", choices=["manual", "schedule", "ci"])
     args = parser.parse_args()
 
+    slug = (os.environ.get("XINGBA_SPA_SLUG") or args.slug).strip() or DEFAULT_SLUG
     pages = int(os.environ.get("XINGBA_SPA_INCREMENTAL_PAGES") or args.pages)
     CrawlerRegistry.discover()
 
-    crawler_cls = CrawlerRegistry.get(SLUG)
+    crawler_cls = CrawlerRegistry.get(slug)
     if not crawler_cls:
-        print(f"Missing crawler: {SLUG}")
+        print(f"Missing crawler: {slug}")
         sys.exit(1)
 
-    print(f"\n=== {crawler_cls.meta.name} ({SLUG}) pages 1-{pages} (range=all) ===")
+    print(f"\n=== {crawler_cls.meta.name} ({slug}) pages 1-{pages} (range=all) ===")
     result = run_crawler(
         crawler_cls,
         triggered_by=args.trigger,

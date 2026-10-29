@@ -39,6 +39,7 @@ env:
   API_SECRET: ${{ secrets.API_SECRET }}
   XINGBA_SPA_USER: ${{ secrets.XINGBA_SPA_USER }}
   XINGBA_SPA_PASS: ${{ secrets.XINGBA_SPA_PASS }}
+  XINGBA_SPA_SLUG: xingba-spa-798
   XINGBA_SPA_CONTINUOUS_MAX: ${{ github.event.inputs.max_page || '30000' }}
   XINGBA_SPA_CONTINUOUS_CHUNK: ${{ github.event.inputs.chunk_pages || '40' }}
   XINGBA_SPA_CONTINUOUS_BUDGET_MIN: ${{ github.event.inputs.budget_minutes || '330' }}
@@ -65,7 +66,7 @@ jobs:
       - name: Continuous crawl
         working-directory: crawlers
         run: |
-          ARGS=(--trigger ci)
+          ARGS=(--slug xingba-spa-798 --trigger ci)
           if [ "${{ github.event.inputs.reset_cursor }}" = "true" ]; then
             ARGS+=(--reset-cursor)
           fi

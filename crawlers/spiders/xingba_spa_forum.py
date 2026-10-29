@@ -465,3 +465,37 @@ class XingbaSpaForumCrawler(BaseCrawler):
 
 
 CrawlerRegistry.register(XingbaSpaForumCrawler)
+
+
+class XingbaSpa280Crawler(XingbaSpaForumCrawler):
+    """华人精品原创下载（categories_id=280，channel=412）。"""
+
+    meta = CrawlerMeta(
+        name="杏吧SPA华人精品原创下载",
+        slug="xingba-spa-280",
+        description=(
+            "新版 SPA 按新主题+全部时间爬取华人精品原创下载(categories_id=280)，"
+            "内部分页走 Search/Social/Query"
+        ),
+        schedule="15 */4 * * *",
+        config={
+            "retry_limit": 2,
+            "site_base": "https://www.bin7sha1n.website",
+            "realm_id": "666a736faa91b688401ae8da",
+            "channel_id": "412",
+            "category_id": "280",
+            "forum_name": "华人精品原创下载",
+            "filter": "publish",
+            "range_days": "all",
+            "page_size": 16,
+            "start_page": 1,
+            "end_page": 6,
+            "page_delay": 0.3,
+            "resolve_workers": 8,
+            "sort_field": "create_time",
+            "time_budget_sec": 0,
+        },
+    )
+
+
+CrawlerRegistry.register(XingbaSpa280Crawler)

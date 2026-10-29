@@ -22,7 +22,7 @@ from framework import CrawlerRegistry, run_crawler
 from framework import db
 from spiders.xingba_spa_client import max_safe_page
 
-SLUG = "xingba-spa-798"
+DEFAULT_SLUG = "xingba-spa-798"
 CURSOR_KEY = "spa_backfill_next_page"
 BEFORE_KEY = "spa_backfill_before_ts"
 DEFAULT_MAX_PAGE = 30000
@@ -74,6 +74,11 @@ def _oldest_create_time_from_db(crawler_id: int) -> int | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Xingba SPA continuous backfill (range=all)")
+    parser.add_argument(
+        "--slug",
+        default=DEFAULT_SLUG,
+        help="Crawler slug (default xingba-spa-798)",
+    )
     parser.add_argument("--trigger", default="ci", choices=["manual", "schedule", "ci"])
     parser.add_argument("--max-page", type=int, default=DEFAULT_MAX_PAGE)
     parser.add_argument("--chunk-pages", type=int, default=DEFAULT_CHUNK)
@@ -86,6 +91,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
+    slug = (os.environ.get("XINGBA_SPA_SLUG") or args.slug).strip() or DEFAULT_SLUG
     max_page = int(os.environ.get("XINGBA_SPA_CONTINUOUS_MAX") or args.max_page)
     chunk = int(os.environ.get("XINGBA_SPA_CONTINUOUS_CHUNK") or args.chunk_pages)
     budget_min = float(
@@ -98,9 +104,9 @@ def main() -> None:
     )
 
     CrawlerRegistry.discover()
-    crawler_cls = CrawlerRegistry.get(SLUG)
+    crawler_cls = CrawlerRegistry.get(slug)
     if not crawler_cls:
-        print(f"Missing crawler: {SLUG}")
+        print(f"Missing crawler: {slug}")
         sys.exit(1)
 
     page_size = int(
@@ -110,7 +116,7 @@ def main() -> None:
 
     if reset:
         db.patch_crawler_config(
-            SLUG,
+            slug,
             {
                 CURSOR_KEY: START_PAGE,
                 BEFORE_KEY: None,
@@ -119,7 +125,7 @@ def main() -> None:
         )
         print(f"Cursor reset: {CURSOR_KEY}={START_PAGE}, {BEFORE_KEY}=None")
 
-    row = db.get_crawler_by_slug(SLUG)
+    row = db.get_crawler_by_slug(slug)
     cfg = row["config"] if row else {}
     next_page = _next_page_from_config(cfg)
     before_ts = _before_ts_from_config(cfg)
@@ -131,7 +137,7 @@ def main() -> None:
             before_ts = oldest
             next_page = START_PAGE
             db.patch_crawler_config(
-                SLUG,
+                slug,
                 {CURSOR_KEY: START_PAGE, BEFORE_KEY: before_ts, "spa_range_days": "all"},
             )
             print(
@@ -154,7 +160,7 @@ def main() -> None:
     rounds = 0
 
     print(
-        f"Continuous plan: {SLUG} from page {next_page}, max={max_page}, "
+        f"Continuous plan: {slug} from page {next_page}, max={max_page}, "
         f"safe_page={safe_page}, chunk={chunk}, budget={budget_min}m, "
         f"range=all, before_ts={before_ts}"
     )
@@ -226,7 +232,7 @@ def main() -> None:
             elif exhausted:
                 print("Offset capped and list exhausted; done.")
                 db.patch_crawler_config(
-                    SLUG,
+                    slug,
                     {
                         CURSOR_KEY: new_cursor,
                         BEFORE_KEY: before_ts,
@@ -241,7 +247,7 @@ def main() -> None:
                     f"Cannot roll further (oldest={oldest_ts}, before={before_ts}); stop"
                 )
                 db.patch_crawler_config(
-                    SLUG,
+                    slug,
                     {
                         CURSOR_KEY: new_cursor,
                         BEFORE_KEY: before_ts,
@@ -251,7 +257,7 @@ def main() -> None:
                 break
 
         db.patch_crawler_config(
-            SLUG,
+            slug,
             {
                 CURSOR_KEY: new_cursor,
                 BEFORE_KEY: before_ts,
@@ -280,7 +286,7 @@ def main() -> None:
 
         next_page = new_cursor
 
-    final = db.get_crawler_by_slug(SLUG)
+    final = db.get_crawler_by_slug(slug)
     fcfg = final["config"] if final else {}
     print(
         f"\nDone rounds={rounds}, new_records={total_new}, "
