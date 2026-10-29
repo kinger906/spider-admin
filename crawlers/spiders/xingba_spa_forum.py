@@ -314,6 +314,11 @@ class XingbaSpaForumCrawler(BaseCrawler):
                     f"Page {page}: {len(page_rows)} fetched, {saved} new saved "
                     f"(skipped_ads={skipped_ads}, api_count={result.get('count')})"
                 )
+            else:
+                self.logger.info(
+                    f"Page {page}: 0 fetched (skipped_ads={skipped_ads}, "
+                    f"api_count={result.get('count')}, list={len(items)})"
+                )
 
             self._last_completed_page = page
 
