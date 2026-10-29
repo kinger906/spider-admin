@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from framework import CrawlerRegistry, run_crawler
 from framework import db
+from framework.registry import crawler_file_path
 from spiders.xingba_spa_client import max_safe_page
 
 DEFAULT_SLUG = "xingba-spa-798"
