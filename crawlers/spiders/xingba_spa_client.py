@@ -246,11 +246,10 @@ class XingbaSpaClient:
             raise PageOffsetTooLarge(
                 f"limit*page too large locally: {limit_i}*{page_i}>{MAX_PAGE_PRODUCT}"
             )
-        # type=4 = 推荐/广告流（id 常为 po.*），会淹没真实帖；服务端排除后分页才有有效密度
+        # 注意：版块真实帖大量也是 type=4（数字 id）；广告是 id 前缀 po.*，勿在此按 type 排除
         and_filters: list[dict[str, Any]] = [
             {"field": "categories_id", "op": "$eq", "value": str(category_id)},
             {"field": "status", "op": "$in", "value": [1, 8]},
-            {"field": "type", "op": "$ne", "value": 4},
         ]
         if range_days is not None and int(range_days) > 0:
             gte = int(time.time()) - int(range_days) * 24 * 3600

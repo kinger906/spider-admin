@@ -365,16 +365,9 @@ class XingbaSpaForumCrawler(BaseCrawler):
 
     @staticmethod
     def _is_ad_or_promo_post(item: dict) -> bool:
-        """推荐引擎/广告贴：id 为 po.*，或 type=4。"""
+        """推荐/广告贴：id 前缀 po.*（type=4 也可能是真实下载帖，不能当广告）。"""
         post_id = str(item.get("id") or "").strip().lower()
-        if post_id.startswith("po."):
-            return True
-        try:
-            if int(item.get("type") or 0) == 4:
-                return True
-        except (TypeError, ValueError):
-            pass
-        return False
+        return post_id.startswith("po.")
 
     @staticmethod
     def _join_text(item: dict) -> str:
