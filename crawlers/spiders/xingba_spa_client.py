@@ -422,7 +422,8 @@ class XingbaSpaClient:
     ) -> list[dict[str, Any]]:
         """详情附件 → torrent_url + magnet（优先用 magnet 给下载器）。
 
-        register_download=False：跳过站点登记接口（CDN 可直接拉种子，省一次 RTT）。
+        Trend/Read 现在常不带 resource.name；需再调 Trend/Download 取 CDN 文件名。
+        register_download 保留兼容：为 True 时即使已有 name 也会再登记一次。
         """
         sess = session or self.session
         detail = self.trend_read(for_id, session=sess)
@@ -434,14 +435,30 @@ class XingbaSpaClient:
             resource = att.get("resource") if isinstance(att.get("resource"), dict) else {}
             resource_name = str(resource.get("name") or "")
             file_hash = str(file_obj.get("hash") or "")
+            # Read 无 name / 仅占位 master.torrent 时，用 Download 换真实 CDN 名
+            need_dl = bool(file_hash) and (
+                register_download
+                or not resource_name
+                or resource_name == "master.torrent"
+            )
+            if need_dl:
+                try:
+                    dl = self.trend_download(for_id=for_id, file_hash=file_hash)
+                    msg = dl.get("msg") if isinstance(dl, dict) else {}
+                    if isinstance(msg, dict):
+                        res = (
+                            msg.get("resource")
+                            if isinstance(msg.get("resource"), dict)
+                            else {}
+                        )
+                        name = str(res.get("name") or "")
+                        if name:
+                            resource_name = name
+                except Exception:
+                    pass
             torrent_url = self.torrent_cdn_url(resource_name)
             magnet = ""
             if torrent_url:
-                if register_download and file_hash:
-                    try:
-                        self.trend_download(for_id=for_id, file_hash=file_hash)
-                    except Exception:
-                        pass
                 try:
                     raw = self.fetch_torrent_bytes(torrent_url, session=sess)
                     magnet = self.torrent_to_magnet(raw)

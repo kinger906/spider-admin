@@ -323,7 +323,9 @@ class XingbaSpaForumCrawler(BaseCrawler):
             self._last_completed_page = page
 
             if page < end_page:
-                time.sleep(page_delay)
+                # 整页广告无需等待解析节奏
+                delay = 0.05 if skipped_ads and skipped_ads >= len(items) else page_delay
+                time.sleep(delay)
 
         self.logger.info(
             f"[SPA {forum_name}] fetched {fetched_total} posts total "

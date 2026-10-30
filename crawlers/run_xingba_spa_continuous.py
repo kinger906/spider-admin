@@ -289,6 +289,24 @@ def main() -> None:
             else:
                 print(f"Reached end of list at page {last_page}; done.")
             break
+        # 前段常被 po.* 推荐流占满（入库 0）；整轮空结果时向前跳跃，尽快到数字 id 区
+        if int(result.get("items") or 0) == 0 and not stopped_by_budget:
+            leap = max(chunk * 3, 120)
+            leaped = min(new_cursor + leap, safe_page + 1, max_page + 1)
+            if leaped > new_cursor:
+                print(
+                    f"Empty round (likely po.* ad flood); "
+                    f"leap cursor {new_cursor} -> {leaped}"
+                )
+                new_cursor = leaped
+                db.patch_crawler_config(
+                    slug,
+                    {
+                        CURSOR_KEY: new_cursor,
+                        BEFORE_KEY: before_ts,
+                        "spa_continuous_last_run_at": int(time.time()),
+                    },
+                )
         if new_cursor > max_page:
             print(f"Reached max_page={max_page}; done.")
             break

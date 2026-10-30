@@ -1,0 +1,14 @@
+---
+description: After finishing code changes, commit and push without waiting to be asked
+alwaysApply: true
+---
+
+# Auto commit and push
+
+When a task produces meaningful code/config changes and work on that change set is done:
+
+1. Commit with a concise message (follow repo style; stage only relevant files).
+2. `git push` to the tracked remote branch immediately after a successful commit.
+3. Do not wait for the user to say「提交」or「push」unless they explicitly asked to hold off, or the change is secrets/credentials only.
+
+Still respect: no force-push to main/master, no amending pushed commits, no skipping hooks, no committing secrets.
